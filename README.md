@@ -53,3 +53,8 @@ Il giapponese (che WoW non ha come lingua del client) usa il font M+ 1p incluso 
 `/kzz` (o `/zugzug`) player · `/kzz lib` libreria · `/kzz config` impostazioni · `play` `stop` `next` `prev` `shuffle` · `on`/`off` · `auto` · `playlist <nome|tutti>` · `status` · `lock` · `reset` · `minimap` · `lang`.
 
 Limiti di WoW: niente pausa vera (stop + riparte dall'inizio del brano) e niente seek; il volume è quello della **Musica** nelle opzioni audio.
+
+## Licenza
+Codice: [MIT](LICENSE) © 2026 MikeAymeric.
+Il font `KalimdorZugZugRadio/fonts/MPLUS1p-Regular.ttf` (M+ 1p, © The M+ Project Authors) **non** è coperto dalla MIT: è distribuito con la SIL Open Font License 1.1 (`KalimdorZugZugRadio/fonts/OFL-MPLUS1p.txt`).
+La musica non fa parte del progetto: ognuno usa i propri file.
