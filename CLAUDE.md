@@ -70,6 +70,17 @@ The rule latches on when **both** `Campfire Nearby` (1283391) and `Welcoming Cam
 - **Auras are unreadable in combat**: `C_UnitAuras.*` errors with "Auras cannot be accessed when secret while tainted". Only query them out of combat (`InCombatLockdown()` guard + `pcall`).
 - No `COMBAT_LOG_EVENT_UNFILTERED`. Wrap uncertain APIs in `pcall`.
 
-## Untested in-game so far
+## In-game status
 
-The addon as a whole has not yet been run on the client (only the stubbed harness). The following are assumptions: `PLAYER_STARTED_MOVING` existing, `GetUnitSpeed` being readable, the frame type `"DropdownButton"`, the bundled TTF loading via `FontObject:SetFont` and the Menu `AddInitializer` font hook, the Addon Compartment and the `INV_Misc_Drum_01` icon existing on Forever, and `PlayMusic` not being overridden by zone music changes.
+v0.4.0 (git tag) was confirmed working in-game by the user on 2026-11-10: player, library, settings panel and minimap button. Lessons learned on Forever:
+- **Some modern widget methods don't exist.** `Slider:SetObeyStepDrag` is missing (it broke the library window). Guard optional methods with `if obj.Method then`, and mark them absent in the harness stubs.
+- **The minimap button needs** a frame level above `Minimap:GetFrameLevel()`, or it renders underneath.
+- **`Settings.OpenToCategory` may silently not show the panel.** `ns.Settings:Open()` tries several methods, falls back to a standalone window, and records the attempts in `KZZR_DB.lastSettingsOpen`.
+- **For diagnosis**, `KZZR_DB.startupErrors` and `KZZR_DB.lastDebug` are written to `WTF\Account\<acct>\SavedVariables\KalimdorZugZugRadio.lua` on `/reload`, so read that file instead of asking the user to copy chat.
+- **Deploying:** the user's game install is a copy, so after code changes, copy the changed `.lua`/`.toc` files to `<WoW>\_forever_\Interface\AddOns\KalimdorZugZugRadio\`. Never copy over `music\`, `covers\` or `Library.lua` there.
+
+Still unverified: whether non-ASCII file paths play (the import script avoids them by renaming).
+
+## Git
+
+The repo is on `main`. `music/*` and `covers/` are gitignored because they hold user content, often copyrighted; `Library.lua` is committed as the empty placeholder.
