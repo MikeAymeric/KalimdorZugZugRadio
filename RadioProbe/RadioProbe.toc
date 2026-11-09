@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: Radio Probe
+## Notes: Test di compatibilità del client per Forever Radio. /rprobe per i comandi.
+## Version: 0.1.0
+## SavedVariables: RadioProbeDB
+
+RadioProbe.lua

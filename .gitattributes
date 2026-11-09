@@ -1,0 +1,10 @@
+* text=auto
+*.lua text eol=lf
+*.toc text eol=crlf
+*.py text eol=lf
+*.ttf binary
+*.png binary
+*.tga binary
+*.ogg binary
+*.mp3 binary
+*.wav binary

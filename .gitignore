@@ -1,0 +1,14 @@
+# Musica e copertine dell'utente: generate/personali, spesso protette da copyright
+KalimdorZugZugRadio/music/*
+!KalimdorZugZugRadio/music/.gitkeep
+KalimdorZugZugRadio/covers/
+
+# Dipendenze dei test
+tests/node_modules/
+
+# Python / sistema
+__pycache__/
+*.pyc
+Thumbs.db
+Desktop.ini
+.DS_Store

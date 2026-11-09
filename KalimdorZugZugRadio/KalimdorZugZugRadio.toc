@@ -1,0 +1,28 @@
+## Interface: 16001
+## Title: Kalimdor ZugZug Radio
+## Notes: Conditional radio: your playlists for bosses, combat, flights, campfires and more. /kzz
+## Notes-itIT: Radio condizionale: le tue playlist per boss, combattimento, volo, campfire e altro. /kzz
+## Notes-frFR: Radio conditionnelle : vos playlists pour les boss, le combat, les vols, les feux de camp et plus. /kzz
+## Notes-deDE: Bedingtes Radio: deine Playlists für Bosse, Kampf, Flüge, Lagerfeuer und mehr. /kzz
+## Notes-esES: Radio condicional: tus listas para jefes, combate, vuelos, hogueras y más. /kzz
+## Notes-esMX: Radio condicional: tus listas para jefes, combate, vuelos, fogatas y más. /kzz
+## Notes-ptBR: Rádio condicional: suas playlists para chefes, combate, voos, fogueiras e mais. /kzz
+## Notes-ruRU: Условное радио: ваши плейлисты для боссов, боя, полётов, костров и не только. /kzz
+## Notes-zhCN: 条件电台：为首领、战斗、飞行、营火等场景播放你的播放列表。/kzz
+## Notes-zhTW: 條件電台：為首領、戰鬥、飛行、營火等情境播放你的播放清單。/kzz
+## Version: 0.4.0
+## SavedVariables: KZZR_DB
+## IconTexture: Interface\Icons\INV_Misc_Drum_01
+## AddonCompartmentFunc: KZZR_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: KZZR_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: KZZR_OnCompartmentLeave
+
+Library.lua
+Locales.lua
+Core.lua
+Player.lua
+Rules.lua
+UI.lua
+LibraryUI.lua
+Settings.lua
+Minimap.lua

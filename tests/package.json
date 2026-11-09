@@ -1,0 +1,6 @@
+{
+  "name": "kzzr-tests",
+  "private": true,
+  "scripts": { "test": "node run.js", "lint": "node lint.js" },
+  "devDependencies": { "fengari": "0.1.4", "luaparse": "0.3.1" }
+}
