@@ -49,7 +49,7 @@ You can already listen to the game soundtrack: open the library (the **Library**
    World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio\music\
    ```
    You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
-2. In the addon folder, double-click **`Import music.bat`**. A window shows the progress; press a key to close it at the end.
+2. In the addon folder, double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/): tick "Add python.exe to PATH" when installing it). A window shows the progress; press Enter to close it at the end. If double-clicking opens the file in an editor instead, use the terminal command below.
 
    You can also run the script from a terminal opened in the addon folder, which lets you add options:
    ```
@@ -76,7 +76,7 @@ What the script does:
    https://example.com/feed/my-podcast.xml 3
    https://podcasts.apple.com/us/podcast/name/id1234567890 2
    ```
-3. Double-click **`Import music.bat`** before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
+3. Double-click **`Import music.py`** before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
 
 In game the episodes are in the **Podcasts** playlist. WoW can't resume a file halfway, so each episode is split into 2:30 parts: the addon remembers the part you reached (even after logging out) and resumes from there.
 
@@ -177,7 +177,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 
 ## Development
 
-- `KalimdorZugZugRadio/tools/import_music.py`: imports music and podcasts (see above). It lives inside the addon folder so that users installing from CurseForge or Wago have it too; `Import music.bat` runs it with a double-click.
+- `KalimdorZugZugRadio/tools/import_music.py`: imports music and podcasts (see above). It lives inside the addon folder so that users installing from CurseForge or Wago have it too; `Import music.py` runs it with a double-click.
 - `tools/build_game_music.py`: regenerates the game soundtrack catalog (`GameMusic.lua`) from the WoW community listfile. For developers only: the generated file is already included.
 - `tests/`: run `npm install`, then `npm test` (the addon logic in a Lua VM with simulated WoW APIs) and `npm run lint` (Lua syntax check).
 - `RadioProbe/`: a small addon that checks which game APIs work on the client.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+
+- **Import music.bat** is replaced by **Import music.py** (CurseForge does not accept .bat files). Double-click it to import your music and podcasts.
+
 ## 0.6.1
 
 - The music import script now ships inside the addon folder (`tools/import_music.py`), with **Import music.bat** to run it with a double-click. Users installing from CurseForge or Wago have it too.

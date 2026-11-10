@@ -57,7 +57,7 @@ It plays your own playlists based on what your character is doing: a boss fight,
 
 ### Your own music and podcasts
 
-Put your files in the addon's `music` folder and double-click **Import music.bat** in the addon folder (it needs [Python](https://www.python.org/downloads/) and ffmpeg: `winget install Gyan.FFmpeg`). The script converts the files, extracts the covers and builds the library. Then restart the game client.
+Put your files in the addon's `music` folder and double-click **Import music.py** in the addon folder (it needs [Python](https://www.python.org/downloads/) and ffmpeg: `winget install Gyan.FFmpeg`). The script converts the files, extracts the covers and builds the library. Then restart the game client.
 
 For podcasts, list them in `podcasts.txt` in the addon folder (one link per line) and run the same script.
 

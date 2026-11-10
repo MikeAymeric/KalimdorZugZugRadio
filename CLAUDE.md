@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- Import music / regenerate the library: `python KalimdorZugZugRadio/tools/import_music.py [--addon DIR] [--keep-originals] [--keep-names]` (or `Import music.bat` in the addon folder). The script ships inside the addon so CurseForge/Wago users get it; the store zip must contain only the `KalimdorZugZugRadio` folder. It uses only the stdlib plus ffmpeg/ffprobe.
+- Import music / regenerate the library: `python KalimdorZugZugRadio/tools/import_music.py [--addon DIR] [--keep-originals] [--keep-names]` (or double-click `Import music.py` in the addon folder, a launcher that pauses at the end; CurseForge rejects `.bat` files in the zip). The script ships inside the addon so CurseForge/Wago users get it; the store zip must contain only the `KalimdorZugZugRadio` folder. It uses only the stdlib plus ffmpeg/ffprobe.
   - It finds the addon dir in this order, looking for `KalimdorZugZugRadio.toc`:
     1. `--addon`;
     2. the cwd and its parents;
