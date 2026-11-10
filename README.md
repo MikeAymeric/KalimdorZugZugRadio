@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.svg" alt="Kalimdor ZugZug Radio" width="180"></p>
+
 # Kalimdor ZugZug Radio
 
 A music radio addon for **World of Warcraft Forever**.

@@ -10,6 +10,10 @@ Kalimdor ZugZug Radio
 
 Your own music, the WoW soundtrack and your podcasts, played by what you are doing: boss, combat, flight, campfire, zone, night and more.
 
+## Logo
+
+`docs/logo-400.png` (400x400, CurseForge avatar) and `docs/logo-1024.png` (larger, for Wago). Source: `docs/logo.svg`, an original drawing (no Blizzard artwork).
+
 ## Categories
 
 - CurseForge: Audio & Video (secondary: Miscellaneous)

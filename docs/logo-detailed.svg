@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Kalimdor ZugZug Radio</title>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="62%">
+      <stop offset="0" stop-color="#3a2817"/>
+      <stop offset="1" stop-color="#140d08"/>
+    </radialGradient>
+    <radialGradient id="skin" cx="48%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#86c052"/>
+      <stop offset="0.55" stop-color="#5a9636"/>
+      <stop offset="1" stop-color="#3a6b22"/>
+    </radialGradient>
+    <linearGradient id="ear" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6aa63f"/>
+      <stop offset="1" stop-color="#3d6f25"/>
+    </linearGradient>
+    <linearGradient id="tusk" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#e6d6ad"/>
+      <stop offset="1" stop-color="#fffaf0"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4a52"/>
+      <stop offset="1" stop-color="#1e1e23"/>
+    </linearGradient>
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff2a8"/>
+      <stop offset="1" stop-color="#ffb21a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- medallion -->
+  <circle cx="256" cy="256" r="246" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#d4ad55" stroke-width="10"/>
+  <circle cx="256" cy="256" r="226" fill="none" stroke="#6b4f1d" stroke-width="3"/>
+
+  <!-- music notes -->
+  <g fill="#ffcc4d">
+    <g transform="translate(398 118) rotate(-12)">
+      <ellipse cx="0" cy="44" rx="15" ry="11" transform="rotate(-20 0 44)"/>
+      <rect x="11" y="-14" width="5" height="58"/>
+      <path d="M16 -14 C 34 -6 40 6 34 22 C 32 10 26 4 16 2 Z"/>
+    </g>
+    <g transform="translate(58 150) rotate(10) scale(0.75)">
+      <ellipse cx="0" cy="44" rx="15" ry="11" transform="rotate(-20 0 44)"/>
+      <ellipse cx="38" cy="36" rx="15" ry="11" transform="rotate(-20 38 36)"/>
+      <rect x="11" y="-10" width="5" height="54"/>
+      <rect x="49" y="-18" width="5" height="54"/>
+      <path d="M11 -10 L54 -18 L54 -6 L11 2 Z"/>
+    </g>
+  </g>
+
+  <!-- ears (pointed, behind the head) -->
+  <path d="M146 248 L58 196 L74 214 L128 312 Z" fill="url(#ear)" stroke="#2c5219" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M366 248 L454 196 L438 214 L384 312 Z" fill="url(#ear)" stroke="#2c5219" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- hair crest -->
+  <path d="M210 170 C 212 116 232 70 256 34 C 280 70 300 116 302 170 Z" fill="#2a2621" stroke="#14110e" stroke-width="3"/>
+  <path d="M236 150 C 240 112 248 82 256 60 C 264 82 272 112 276 150 Z" fill="#4a443b"/>
+
+  <!-- head -->
+  <path d="M256 138 C 332 138 374 190 380 250 C 386 302 394 334 372 374 C 350 414 306 442 256 444
+           C 206 442 162 414 140 374 C 118 334 126 302 132 250 C 138 190 180 138 256 138 Z"
+        fill="url(#skin)" stroke="#2c5219" stroke-width="5"/>
+
+  <!-- heavy brow -->
+  <path d="M156 240 C 196 204 234 212 256 242 C 278 212 316 204 356 240 C 332 254 292 250 256 268
+           C 220 250 180 254 156 240 Z" fill="#2f5a1d"/>
+
+  <!-- eyes -->
+  <path d="M188 256 L236 268 L202 280 Z" fill="url(#eyeGlow)" stroke="#5a3a08" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M324 256 L276 268 L310 280 Z" fill="url(#eyeGlow)" stroke="#5a3a08" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="214" cy="268" r="4" fill="#3a1e05"/>
+  <circle cx="298" cy="268" r="4" fill="#3a1e05"/>
+
+  <!-- nose -->
+  <path d="M242 276 C 238 302 226 314 236 324 C 246 332 266 332 276 324 C 286 314 274 302 270 276 Z" fill="#3f7426"/>
+  <ellipse cx="244" cy="320" rx="6" ry="4" fill="#1f3a12"/>
+  <ellipse cx="268" cy="320" rx="6" ry="4" fill="#1f3a12"/>
+
+  <!-- jaw shading and mouth -->
+  <path d="M168 372 C 200 412 228 424 256 426 C 284 424 312 412 344 372 C 316 396 288 404 256 404 C 224 404 196 396 168 372 Z"
+        fill="#3d6f25" opacity="0.7"/>
+  <path d="M190 364 C 226 380 286 380 322 364" fill="none" stroke="#1f3a12" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- tusks (from the lower jaw) -->
+  <path d="M196 376 C 186 344 190 314 208 292 C 212 318 218 346 224 372 Z" fill="url(#tusk)" stroke="#a8916a" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M316 376 C 326 344 322 314 304 292 C 300 318 294 346 288 372 Z" fill="url(#tusk)" stroke="#a8916a" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- headphones: band over the head -->
+  <path d="M120 300 C 108 152 178 76 256 76 C 334 76 404 152 392 300" fill="none" stroke="url(#metal)" stroke-width="28" stroke-linecap="round"/>
+  <path d="M132 290 C 124 166 186 98 256 98 C 326 98 388 166 380 290" fill="none" stroke="#ff8a1f" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- headphones: ear cups -->
+  <g>
+    <rect x="104" y="248" width="30" height="22" rx="6" fill="#2a2a30"/>
+    <ellipse cx="118" cy="312" rx="44" ry="60" fill="url(#metal)" stroke="#ff8a1f" stroke-width="7"/>
+    <ellipse cx="118" cy="312" rx="26" ry="40" fill="#141418"/>
+    <ellipse cx="112" cy="296" rx="8" ry="14" fill="#5d5d66" opacity="0.6"/>
+  </g>
+  <g>
+    <rect x="378" y="248" width="30" height="22" rx="6" fill="#2a2a30"/>
+    <ellipse cx="394" cy="312" rx="44" ry="60" fill="url(#metal)" stroke="#ff8a1f" stroke-width="7"/>
+    <ellipse cx="394" cy="312" rx="26" ry="40" fill="#141418"/>
+    <ellipse cx="388" cy="296" rx="8" ry="14" fill="#5d5d66" opacity="0.6"/>
+  </g>
+</svg>

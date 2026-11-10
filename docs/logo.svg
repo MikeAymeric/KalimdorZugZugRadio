@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Kalimdor ZugZug Radio</title>
+  <!-- flat, geometric logo: orc head with headphones -->
+
+  <!-- badge -->
+  <circle cx="256" cy="256" r="248" fill="#231b15"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#ff8a1f" stroke-width="14"/>
+
+  <!-- ears -->
+  <polygon points="156,236 78,196 150,306" fill="#4f9a34"/>
+  <polygon points="356,236 434,196 362,306" fill="#4f9a34"/>
+
+  <!-- head -->
+  <polygon points="186,164 326,164 370,240 356,364 306,422 206,422 156,364 142,240" fill="#6cbf45"/>
+  <!-- jaw shadow -->
+  <polygon points="156,364 206,422 306,422 356,364 306,392 206,392" fill="#549f37"/>
+
+  <!-- topknot -->
+  <polygon points="236,166 256,104 276,166" fill="#1d3317"/>
+
+  <!-- brow -->
+  <polygon points="168,236 256,272 344,236 344,214 256,250 168,214" fill="#1d3317"/>
+
+  <!-- eyes -->
+  <polygon points="190,250 238,268 238,282 196,266" fill="#ffd23f"/>
+  <polygon points="322,250 274,268 274,282 316,266" fill="#ffd23f"/>
+
+  <!-- tusks -->
+  <polygon points="198,394 228,394 210,318" fill="#f6edd2"/>
+  <polygon points="284,394 314,394 302,318" fill="#f6edd2"/>
+
+  <!-- headphones -->
+  <path d="M128 286 C 118 150 186 84 256 84 C 326 84 394 150 384 286" fill="none" stroke="#3a3a42" stroke-width="32" stroke-linecap="round"/>
+  <rect x="94" y="240" width="64" height="112" rx="26" fill="#ff8a1f"/>
+  <rect x="112" y="262" width="28" height="68" rx="12" fill="#17171b"/>
+  <rect x="354" y="240" width="64" height="112" rx="26" fill="#ff8a1f"/>
+  <rect x="372" y="262" width="28" height="68" rx="12" fill="#17171b"/>
+</svg>
