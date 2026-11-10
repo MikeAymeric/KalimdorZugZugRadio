@@ -1,16 +1,18 @@
--- Core: namespace, SavedVariables, libreria, playlist dell'utente, bus di eventi, comandi slash.
+-- Core: namespace, SavedVariables, library, user playlists, event bus, slash commands.
 local ADDON, ns = ...
 local L, CL = ns.L, ns.CL
 
 ns.ADDON = ADDON
 ns.ROOT = "Interface\\AddOns\\" .. ADDON .. "\\"
-ns.ALL = "__all" -- playlist virtuale con tutta la libreria
+ns.ALL = "__all" -- virtual playlist with the whole user library
 
--- Condizioni in ordine di priorità: vince la prima attiva che ha una playlist assegnata.
--- "idle" è sempre attiva: è la musica quando non c'è nessun'altra condizione.
+-- Conditions in priority order: the first active one with an assigned playlist wins.
+-- "idle" is always active: it's the music when no other condition applies.
 ns.SITUATIONS = {
-  { key = "boss" }, { key = "elite" }, { key = "combat" }, { key = "flight" },
-  { key = "campfire" }, { key = "dungeon" }, { key = "town" }, { key = "idle" },
+  { key = "levelup" }, { key = "boss" }, { key = "elite" }, { key = "pvp" }, { key = "combat" },
+  { key = "dead" }, { key = "flight" }, { key = "fishing" }, { key = "swimming" }, { key = "campfire" },
+  { key = "dungeon" }, { key = "mounted" }, { key = "zone" }, { key = "town" }, { key = "night" },
+  { key = "idle" },
 }
 ns.SITUATION_BY_KEY, ns.PRIORITY = {}, {}
 for i, s in ipairs(ns.SITUATIONS) do
@@ -24,27 +26,86 @@ end
 
 local DEFAULTS = {
   enabled = true,
-  mode = "auto",   -- "auto" (condizioni) oppure il nome di una playlist (riproduzione libera)
+  mode = "auto",   -- "auto" (conditions) or a playlist name (free play)
   shuffle = true,
-  playlists = {},  -- nome -> { file, file, ... } (file = id del brano in Library.lua)
-  assign = {},     -- condizione -> nome playlist
-  disabled = {},   -- condizione -> true se disattivata nelle impostazioni
-  lang = nil,      -- nil = lingua del client
-  ui = { shown = true, locked = false },
+  playlists = {},  -- name -> { file, file, ... } (file = track id)
+  -- per-character profiles: name -> { assign = {condition -> playlist}, disabled = {condition -> true},
+  -- zones = {mapID -> {playlist, name}} }. ns.db.assign/disabled/zones point to the active profile.
+  profiles = {},
+  charProfiles = {}, -- "Name-Realm" -> profile name
+  crossfade = true,  -- fade the music volume when the condition changes
+  duck = true,       -- lower the music during cinematics and dialogues
+  afkPause = true,   -- pause while AFK
+  userVolume = nil,  -- the user's Music volume (the addon multiplies it, see Player.lua)
+  favorites = {},    -- track id -> true
+  excluded = {},     -- track id -> true (never played automatically)
+  history = {},      -- track ids, most recent first (max 50)
+  stats = {},        -- track id -> { plays = n, seconds = s }
+  totalSeconds = 0,
+  seenBosses = {},   -- encounterID -> boss name (to assign boss-specific music)
+  podcastProgress = {}, -- "ep:<key>" -> { part = n, done = true|nil, at = timestamp }
+  lang = nil,      -- nil = client language
+  ui = { shown = true, locked = false, skin = "classic", banner = true, compact = false }, -- skin: "classic" | "modern"
   minimap = { angle = 225, hide = false },
 }
 
 ---------------------------------------------------------------------------
--- Utilità
+-- Utilities
 ---------------------------------------------------------------------------
--- Messaggio in chat. key è una chiave di traduzione (testi in ns.CL).
+-- Chat message. key is a translation key (texts in ns.CL).
 function ns.Print(key, ...)
   local msg = CL[key]
   if select("#", ...) > 0 then msg = msg:format(...) end
   print("|cffff7f00ZugZug Radio|r: " .. msg)
 end
 
--- true se v è un "secret value" di Midnight (non confrontabile né usabile).
+---------------------------------------------------------------------------
+-- Profiling: cheap CPU-time accounting of the addon's hot paths (/kzz perf).
+---------------------------------------------------------------------------
+ns.perf = {} -- name -> { calls, total (ms), max (ms) }
+local clock = debugprofilestop
+
+function ns.perfCount(name)
+  local e = ns.perf[name]
+  if not e then e = { calls = 0, total = 0, max = 0 } ns.perf[name] = e end
+  e.calls = e.calls + 1
+end
+
+-- Wraps fn so that its calls and CPU time are recorded under `name`.
+function ns.Profiled(name, fn)
+  if not clock then return fn end
+  return function(...)
+    local t0 = clock()
+    local a, b, c = fn(...)
+    local dt = clock() - t0
+    local e = ns.perf[name]
+    if not e then e = { calls = 0, total = 0, max = 0 } ns.perf[name] = e end
+    e.calls, e.total = e.calls + 1, e.total + dt
+    if dt > e.max then e.max = dt end
+    return a, b, c
+  end
+end
+
+function ns.PerfReport()
+  local rows = {}
+  for name, e in pairs(ns.perf) do rows[#rows + 1] = { name = name, e = e } end
+  table.sort(rows, function(a, b) return a.e.total > b.e.total end)
+  local lines = {}
+  local mem = 0
+  if UpdateAddOnMemoryUsage and GetAddOnMemoryUsage then
+    pcall(UpdateAddOnMemoryUsage)
+    local ok, kb = pcall(GetAddOnMemoryUsage, ns.ADDON)
+    mem = ok and kb or 0
+  end
+  lines[1] = ("ZugZug Radio perf: memory %.0f KB, since %.0fs ago"):format(mem, GetTime() - (ns.perfSince or 0))
+  for i = 1, math.min(#rows, 15) do
+    local r = rows[i]
+    lines[#lines + 1] = ("  %-34s calls %6d   total %8.2f ms   max %6.2f ms"):format(r.name, r.e.calls, r.e.total, r.e.max)
+  end
+  return lines
+end
+
+-- true if v is a Midnight "secret value" (cannot be compared or used).
 function ns.IsSecret(v)
   if issecretvalue then
     local ok, secret = pcall(issecretvalue, v)
@@ -53,7 +114,7 @@ function ns.IsSecret(v)
   return false
 end
 
--- Chiama fn protetta; restituisce il primo valore solo se non è secret.
+-- Calls fn protected; returns the first value only if it isn't secret.
 function ns.Safe(fn, ...)
   if not fn then return nil end
   local ok, v = pcall(fn, ...)
@@ -72,8 +133,8 @@ function ns.TrackLabel(t)
   return t.title
 end
 
--- Tooltip dell'addon (separato da GameTooltip per poter cambiare font senza toccare quello di Blizzard).
--- lines = { "testo" | { "testo", r, g, b } , ... }; la prima riga è il titolo.
+-- Addon tooltip (separate from GameTooltip so we can change fonts without touching Blizzard's).
+-- lines = { "text" | { "text", r, g, b } , ... }; the first line is the title.
 local tip
 function ns.ShowTooltip(owner, anchor, lines)
   if not tip then
@@ -101,7 +162,7 @@ function ns.HideTooltip()
 end
 
 ---------------------------------------------------------------------------
--- Bus di eventi interno
+-- Internal event bus
 -- TRACK_CHANGED, STATE_CHANGED, SITUATION_CHANGED, MODE_CHANGED, PLAYLISTS_CHANGED(name?)
 ---------------------------------------------------------------------------
 local listeners = {}
@@ -116,7 +177,7 @@ function ns.Fire(event, ...)
   end
 end
 
--- Eventi di gioco: più moduli possono registrare lo stesso evento.
+-- Game events: several modules can register the same event.
 local frame = CreateFrame("Frame")
 local gameHandlers = {}
 function ns.RegisterEvent(event, fn)
@@ -135,31 +196,87 @@ frame:SetScript("OnEvent", function(_, event, ...)
 end)
 
 ---------------------------------------------------------------------------
--- Libreria (generata da tools/import_music.py in Library.lua)
+-- Library (generated by tools/import_music.py into Library.lua)
 ---------------------------------------------------------------------------
-ns.tracks, ns.trackById = {}, {}
+-- ns.tracks = the user's music (Library.lua), ns.episodes = podcast episodes, ns.gameTracks = in-game music (GameMusic.lua).
+-- Every track has a stable id in t.file: the path for user tracks, "game:<FileDataID>" for game music.
+ns.tracks, ns.gameTracks, ns.everyTrack, ns.episodes = {}, {}, {}, {}
+ns.trackById, ns.userById, ns.gameById, ns.episodeById = {}, {}, {}, {}
+ns.GAME = "__game"       -- virtual playlist with all the in-game music
+ns.PODCAST = "__podcast" -- virtual playlist with podcast episodes, newest first
+ns.FAV = "__fav"         -- favourites
+ns.HISTORY = "__history" -- recently played
+ns.TOP = "__top"         -- most played
+-- Podcast episodes are split into parts (Library.lua: episode/part/parts fields): here they become
+-- a single track with t.parts = { {file, duration}, ... } and id "ep:<key>".
+
+local function byFolderTitle(a, b)
+  if a.folder ~= b.folder then return a.folder < b.folder end
+  return a.title:lower() < b.title:lower()
+end
+
+local function indexTrack(t, list, byId)
+  t.folder = t.folder or ""
+  t._search = (t.title .. " " .. (t.artist or "") .. " " .. (t.album or "") .. " " .. t.folder):lower()
+  table.insert(list, t)
+  byId[t.file] = t
+  ns.trackById[t.file] = t
+end
 
 function ns.LoadLibrary()
-  wipe(ns.tracks); wipe(ns.trackById)
+  for _, t in ipairs({ ns.tracks, ns.gameTracks, ns.everyTrack, ns.episodes, ns.trackById, ns.userById,
+                       ns.gameById, ns.episodeById }) do wipe(t) end
+  local episodes = {}
   for _, t in ipairs((KZZR_Library and KZZR_Library.tracks) or {}) do
-    if type(t.file) == "string" and not ns.trackById[t.file] then
+    if type(t.file) == "string" and type(t.episode) == "string" then
+      local ep = episodes[t.episode]
+      if not ep then
+        ep = { file = "ep:" .. t.episode, episode = t.episode, podcast = true, title = t.title or "?",
+               artist = t.artist, album = t.album, folder = t.folder, cover = t.cover, parts = {}, duration = 0 }
+        episodes[t.episode] = ep
+      end
+      table.insert(ep.parts, { file = t.file, duration = tonumber(t.duration) or 0, index = t.part or #ep.parts + 1 })
+    elseif type(t.file) == "string" and not ns.trackById[t.file] then
       t.title = (t.title and t.title ~= "") and t.title or t.file:match("([^\\]+)%.%w+$") or t.file
-      t.folder = t.folder or ""
-      t._search = (t.title .. " " .. (t.artist or "") .. " " .. (t.album or "") .. " " .. t.folder):lower()
-      table.insert(ns.tracks, t)
-      ns.trackById[t.file] = t
+      indexTrack(t, ns.tracks, ns.userById)
     end
   end
-  table.sort(ns.tracks, function(a, b)
-    if a.folder ~= b.folder then return a.folder < b.folder end
-    return a.title:lower() < b.title:lower()
+  for _, ep in pairs(episodes) do
+    table.sort(ep.parts, function(a, b) return a.index < b.index end)
+    for _, part in ipairs(ep.parts) do ep.duration = ep.duration + part.duration end
+    -- podcasts have their own category: not part of "Whole library" (ns.tracks)
+    indexTrack(ep, ns.episodes, ns.episodeById)
+  end
+  table.sort(ns.episodes, function(a, b)
+    if (a.album or "") ~= (b.album or "") then return (a.album or "") > (b.album or "") end -- date, newest first
+    return a.title < b.title
   end)
+  for _, g in ipairs(KZZR_GameMusic or {}) do
+    local id = "game:" .. tostring(g.fid)
+    if type(g.fid) == "number" and not ns.trackById[id] then
+      indexTrack({ file = id, fid = g.fid, game = true, title = g.title or tostring(g.fid), artist = "World of Warcraft",
+        album = "", folder = g.folder, duration = g.duration, icon = g.icon }, ns.gameTracks, ns.gameById)
+    end
+  end
+  table.sort(ns.tracks, byFolderTitle)
+  table.sort(ns.gameTracks, byFolderTitle)
+  for _, list in ipairs({ ns.tracks, ns.episodes, ns.gameTracks }) do
+    for _, t in ipairs(list) do table.insert(ns.everyTrack, t) end
+  end
+end
+
+-- Cover texture: game icon (FileDataID) for game music, the addon's PNG for the rest.
+function ns.CoverOf(t)
+  if not t then return nil end
+  if t.icon then return t.icon end
+  if t.cover then return ns.ROOT .. t.cover end
+  return nil
 end
 
 ---------------------------------------------------------------------------
 -- Playlist
 ---------------------------------------------------------------------------
-local cache = {} -- nome -> { name, tracks = {...}, has = { [file] = true } }
+local cache = {} -- name -> { name, tracks = {...}, has = { [file] = true } }
 
 local function invalidate(name)
   if name then cache[name] = nil else wipe(cache) end
@@ -168,7 +285,37 @@ end
 
 function ns.PlaylistLabel(name, chat)
   if name == ns.ALL then return (chat and CL or L).ALL_LIBRARY end
+  if name == ns.GAME then return (chat and CL or L).GAME_MUSIC end
+  if name == ns.PODCAST then return (chat and CL or L).PODCASTS end
+  if name == ns.FAV then return (chat and CL or L).FAVORITES end
+  if name == ns.HISTORY then return (chat and CL or L).HISTORY end
+  if name == ns.TOP then return (chat and CL or L).TOP end
   return name
+end
+
+-- Part to resume an episode from (1 if never played or already finished).
+function ns.EpisodePart(t)
+  local prog = t and t.parts and ns.db.podcastProgress[t.file]
+  if not prog or prog.done then return 1 end
+  return math.max(1, math.min(#t.parts, tonumber(prog.part) or 1))
+end
+
+function ns.SetEpisodePart(t, part, done)
+  if not (t and t.parts) then return end
+  ns.db.podcastProgress[t.file] = { part = part, done = done or nil, at = time and time() or 0 }
+end
+
+-- All playlists to show in menus: the virtual ones (if they have tracks) + the user's.
+function ns.AllPlaylistNames()
+  ns.InvalidateDynamic()
+  local names = ns.PlaylistNames()
+  for _, virtual in ipairs({ ns.TOP, ns.HISTORY, ns.FAV }) do
+    if ns.IsPlayable(virtual) then table.insert(names, 1, virtual) end
+  end
+  if #ns.episodes > 0 then table.insert(names, 1, ns.PODCAST) end
+  if #ns.gameTracks > 0 then table.insert(names, 1, ns.GAME) end
+  table.insert(names, 1, ns.ALL)
+  return names
 end
 
 function ns.PlaylistNames()
@@ -178,13 +325,33 @@ function ns.PlaylistNames()
   return names
 end
 
--- { name, tracks, has } oppure nil se la playlist non esiste.
+-- { name, tracks, has } or nil if the playlist doesn't exist.
 function ns.GetPlaylist(name)
   if not name then return nil end
   if cache[name] then return cache[name] end
   local pl
   if name == ns.ALL then
-    pl = { name = name, tracks = ns.tracks, has = ns.trackById }
+    pl = { name = name, tracks = ns.tracks, has = ns.userById }
+  elseif name == ns.GAME then
+    pl = { name = name, tracks = ns.gameTracks, has = ns.gameById }
+  elseif name == ns.PODCAST then
+    pl = { name = name, tracks = ns.episodes, has = ns.episodeById }
+  elseif name == ns.FAV or name == ns.HISTORY or name == ns.TOP then
+    pl = { name = name, tracks = {}, has = {} }
+    local ids = {}
+    if name == ns.FAV then
+      for _, t in ipairs(ns.everyTrack) do if ns.db.favorites[t.file] then ids[#ids + 1] = t.file end end
+    elseif name == ns.HISTORY then
+      ids = ns.db.history
+    else
+      for id, st in pairs(ns.db.stats) do if (st.plays or 0) > 0 and ns.trackById[id] then ids[#ids + 1] = id end end
+      table.sort(ids, function(a, b) return ns.db.stats[a].plays > ns.db.stats[b].plays end)
+      for i = #ids, 51, -1 do ids[i] = nil end
+    end
+    for _, id in ipairs(ids) do
+      local t = ns.trackById[id]
+      if t and not pl.has[id] then table.insert(pl.tracks, t) pl.has[id] = true end
+    end
   else
     local ids = ns.db.playlists[name]
     if type(ids) ~= "table" then return nil end
@@ -206,11 +373,16 @@ function ns.IsPlayable(name)
   return pl ~= nil and #pl.tracks > 0
 end
 
--- Ricerca case-insensitive per i comandi slash ("all" o la parola tradotta = tutta la libreria).
+-- Case-insensitive lookup for slash commands ("all" or its translation = the whole library).
 function ns.FindPlaylist(name)
   if type(name) ~= "string" or name == "" then return nil end
   local lower = name:lower()
   if name == ns.ALL then return ns.ALL end
+  if name == ns.GAME or lower == "wow" or lower == "game" or lower == L.GAME_MUSIC:lower() then return ns.GAME end
+  if name == ns.PODCAST or lower == "podcast" or lower == "podcasts" or lower == L.PODCASTS:lower() then return ns.PODCAST end
+  if name == ns.FAV or lower == "fav" or lower == "favorites" or lower == L.FAVORITES:lower() then return ns.FAV end
+  if name == ns.HISTORY or lower == "history" or lower == L.HISTORY:lower() then return ns.HISTORY end
+  if name == ns.TOP or lower == "top" or lower == L.TOP:lower() then return ns.TOP end
   for _, loc in pairs(ns.LOCALES) do
     if loc.ALL_KEYWORD and lower == loc.ALL_KEYWORD:lower() then return ns.ALL end
   end
@@ -222,11 +394,11 @@ end
 
 local function cleanName(name)
   name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
-  if name == "" or name == ns.ALL then return nil end
+  if name == "" or name:sub(1, 2) == "__" then return nil end -- "__..." are the virtual playlists
   return name
 end
 
--- Le funzioni di modifica restituiscono il nome, oppure nil + chiave di errore traducibile.
+-- Editing functions return the name, or nil + a translatable error key.
 function ns.CreatePlaylist(name)
   name = cleanName(name)
   if not name then return nil, "ERR_BAD_NAME" end
@@ -263,7 +435,7 @@ function ns.DeletePlaylist(name)
   if ns.db.mode == name then ns.SetMode("auto") else ns.Rules:Evaluate(true) end
 end
 
--- Aggiunge/toglie un brano da una playlist dell'utente.
+-- Adds/removes a track from a user playlist.
 function ns.SetInPlaylist(name, id, include)
   local ids = ns.db.playlists[name]
   if type(ids) ~= "table" or not ns.trackById[id] then return end
@@ -275,7 +447,7 @@ function ns.SetInPlaylist(name, id, include)
   ns.Rules:Evaluate()
 end
 
--- Versione in blocco (es. "aggiungi tutti i brani visibili").
+-- Bulk version (e.g. "add all visible tracks").
 function ns.SetManyInPlaylist(name, ids, include)
   local list = ns.db.playlists[name]
   if type(list) ~= "table" then return end
@@ -304,23 +476,319 @@ function ns.SetConditionEnabled(key, on)
   ns.Rules:Evaluate(true)
 end
 
--- Playlist assegnata a una condizione (nil = nessuna, vuota o condizione disattivata).
+---------------------------------------------------------------------------
+-- Zone music: playlists assigned to map IDs (language independent).
+---------------------------------------------------------------------------
+-- Chain of map IDs for the player's position: the best map, then its parents up to the continent.
+-- Cached: it only changes with the zone (refreshed on zone events, or every 10s as a fallback).
+local cachedChain, chainTime = nil, 0
+local function invalidateZone() cachedChain = nil end
+for _, ev in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
+  ns.RegisterEvent(ev, invalidateZone)
+end
+local function mapChain()
+  if cachedChain and GetTime() - chainTime < 10 then return cachedChain end
+  local chain = {}
+  local id = C_Map and ns.Safe(C_Map.GetBestMapForUnit, "player")
+  local guard = 0
+  while type(id) == "number" and id > 0 and guard < 8 do
+    table.insert(chain, id)
+    local info = ns.Safe(C_Map.GetMapInfo, id)
+    if type(info) ~= "table" then break end
+    id = info.parentMapID
+    guard = guard + 1
+  end
+  cachedChain, chainTime = chain, GetTime()
+  return chain
+end
+
+-- The zone-level map of the current position: { id, name } (or nil). Cached with the chain.
+local zoneFor, cachedZone
+function ns.CurrentZone()
+  local chain = mapChain()
+  if zoneFor == chain then return cachedZone end
+  zoneFor, cachedZone = chain, ns.ComputeZone(chain)
+  return cachedZone
+end
+
+function ns.ComputeZone(chain)
+  if #chain == 0 then return nil end
+  local zoneType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+  for _, id in ipairs(chain) do
+    local info = ns.Safe(C_Map.GetMapInfo, id)
+    if type(info) == "table" and info.mapType == zoneType then return { id = id, name = info.name } end
+  end
+  local info = ns.Safe(C_Map.GetMapInfo, chain[1])
+  return { id = chain[1], name = type(info) == "table" and info.name or tostring(chain[1]) }
+end
+
+-- Playlist of the current zone. Only the zone-level map counts: its micro maps (caves, floors)
+-- inherit it, but a city that is a zone of its own (Orgrimmar inside Durotar) does not.
+function ns.ZonePlaylist()
+  local zone = ns.CurrentZone()
+  local z = zone and ns.db.zones[zone.id]
+  return z and z.playlist or nil
+end
+
+function ns.AssignZone(name)
+  local zone = ns.CurrentZone()
+  if not zone then return end
+  ns.db.zones[zone.id] = name and { playlist = name, name = zone.name } or nil
+end
+
+function ns.ZoneCount()
+  local n = 0
+  for _ in pairs(ns.db.zones) do n = n + 1 end
+  return n
+end
+
+-- Playlist assigned to a condition (nil = none, empty, or condition disabled).
 function ns.PlaylistFor(key)
   if ns.db.disabled[key] then return nil end
-  local name = ns.db.assign[key]
+  local name
+  if key == "zone" then
+    name = ns.ZonePlaylist()
+  elseif key == "boss" then
+    -- a playlist for this specific boss wins over the generic boss playlist
+    local id = ns.Rules.encounterID
+    local specific = id and ns.db.bosses[id]
+    name = (specific and ns.IsPlayable(specific.playlist)) and specific.playlist or ns.db.assign[key]
+  else
+    name = ns.db.assign[key]
+  end
   if name and ns.IsPlayable(name) then return name end
   return nil
 end
 
+-- Playlist shown in a condition's dropdown (for "zone": the current zone's playlist).
+function ns.AssignedTo(key)
+  if key == "zone" then return ns.ZonePlaylist() end
+  return ns.db.assign[key]
+end
+
+-- Boss-specific music: encounterID -> { playlist, name }.
+function ns.AssignBoss(id, playlist)
+  ns.db.bosses[id] = playlist and { playlist = playlist, name = ns.db.seenBosses[id] } or nil
+  ns.Fire("PLAYLISTS_CHANGED")
+  ns.Rules:Evaluate(true)
+end
+
+-- Volume of a condition, as a multiplier of the user's volume (default 1 = 100%).
+function ns.ConditionVolume(key)
+  return ns.db.volumes[key] or 1
+end
+
+function ns.SetConditionVolume(key, mult)
+  ns.db.volumes[key] = (mult and mult < 1) and mult or nil
+  if ns.db.mode == "auto" and ns.Rules.current == key then ns.Player:SetConditionVolume(ns.ConditionVolume(key)) end
+  ns.Fire("PLAYLISTS_CHANGED")
+end
+
+---------------------------------------------------------------------------
+-- Favourites, exclusions, history and listening statistics
+---------------------------------------------------------------------------
+local dynamicCache = { [ns.FAV] = true, [ns.HISTORY] = true, [ns.TOP] = true }
+
+-- History and "most played" change with every track: they are recomputed when looked at,
+-- but never while they are the playing queue (it would reshuffle under the player's feet).
+function ns.InvalidateDynamic()
+  for name in pairs(dynamicCache) do
+    if ns.Player.playlist ~= name then cache[name] = nil end
+  end
+end
+
+function ns.IsFavorite(t) return t and ns.db.favorites[t.file] == true end
+function ns.IsExcluded(t) return t and ns.db.excluded[t.file] == true end
+
+function ns.ToggleFavorite(t)
+  if not t then return end
+  ns.db.favorites[t.file] = (not ns.db.favorites[t.file]) or nil
+  invalidate(ns.FAV)
+end
+
+function ns.SetExcluded(t, on)
+  if not t then return end
+  ns.db.excluded[t.file] = on or nil
+  ns.Fire("PLAYLISTS_CHANGED")
+end
+
+-- Called by the player when a track starts (new) and/or stops (prev, with the seconds played).
+local lastRecorded
+function ns.RecordPlay(prev, new, seconds)
+  if prev and (seconds or 0) > 0 then
+    local st = ns.db.stats[prev.file] or { plays = 0, seconds = 0 }
+    st.seconds = (st.seconds or 0) + seconds
+    ns.db.stats[prev.file] = st
+    ns.db.totalSeconds = (ns.db.totalSeconds or 0) + seconds
+  end
+  if new and new ~= lastRecorded then -- podcast parts of the same episode count once
+    lastRecorded = new
+    local st = ns.db.stats[new.file] or { plays = 0, seconds = 0 }
+    st.plays = (st.plays or 0) + 1
+    ns.db.stats[new.file] = st
+    local h = ns.db.history
+    for i = #h, 1, -1 do if h[i] == new.file then table.remove(h, i) end end
+    table.insert(h, 1, new.file)
+    for i = #h, 51, -1 do h[i] = nil end
+  end
+end
+
+function ns.FormatDuration(sec)
+  sec = math.floor(sec or 0)
+  local h, m = math.floor(sec / 3600), math.floor(sec % 3600 / 60)
+  return h > 0 and ("%dh %02dm"):format(h, m) or ("%dm"):format(m)
+end
+
 function ns.Assign(key, name)
   if not ns.SITUATION_BY_KEY[key] then return end
-  ns.db.assign[key] = name
+  if key == "zone" then ns.AssignZone(name) else ns.db.assign[key] = name end
   ns.Fire("PLAYLISTS_CHANGED")
   ns.Rules:Evaluate(true)
 end
 
 ---------------------------------------------------------------------------
--- Modalità: "auto" (condizioni) o riproduzione libera di una playlist
+-- Profiles (per character): condition settings; playlists stay shared.
+---------------------------------------------------------------------------
+ns.DEFAULT_PROFILE = "Default"
+
+function ns.CharacterKey()
+  local name = UnitName and ns.Safe(UnitName, "player")
+  local realm = GetRealmName and ns.Safe(GetRealmName)
+  if type(name) ~= "string" or name == "" then return nil end
+  return name .. "-" .. (type(realm) == "string" and realm or "")
+end
+
+local function ensureProfile(name)
+  local prof = ns.db.profiles[name]
+  if type(prof) ~= "table" then prof = {} ns.db.profiles[name] = prof end
+  prof.assign = type(prof.assign) == "table" and prof.assign or {}
+  prof.disabled = type(prof.disabled) == "table" and prof.disabled or {}
+  prof.zones = type(prof.zones) == "table" and prof.zones or {}
+  prof.bosses = type(prof.bosses) == "table" and prof.bosses or {}
+  prof.volumes = type(prof.volumes) == "table" and prof.volumes or {}
+  return prof
+end
+
+function ns.ActivateProfile(name)
+  if not ns.db.profiles[name] then name = ns.DEFAULT_PROFILE end
+  local prof = ensureProfile(name)
+  ns.profileName = name
+  ns.db.assign, ns.db.disabled, ns.db.zones = prof.assign, prof.disabled, prof.zones
+  ns.db.bosses, ns.db.volumes = prof.bosses, prof.volumes
+  ns.Fire("PLAYLISTS_CHANGED")
+  if ns.Rules.started then ns.Rules:Evaluate(true) end
+end
+
+function ns.ProfileNames()
+  local names = {}
+  for name in pairs(ns.db.profiles) do names[#names + 1] = name end
+  table.sort(names, function(a, b)
+    if a == ns.DEFAULT_PROFILE then return true elseif b == ns.DEFAULT_PROFILE then return false end
+    return a:lower() < b:lower()
+  end)
+  return names
+end
+
+-- Uses profile `name` for the current character.
+function ns.SetCharacterProfile(name)
+  local char = ns.CharacterKey()
+  if char then ns.db.charProfiles[char] = (name ~= ns.DEFAULT_PROFILE) and name or nil end
+  ns.ActivateProfile(name)
+  ns.Print("MSG_PROFILE_SET", name == ns.DEFAULT_PROFILE and CL.PROFILE_DEFAULT or name)
+end
+
+-- Creates a profile named after the character, copying the current settings, and switches to it.
+function ns.NewCharacterProfile()
+  local char = ns.CharacterKey() or "Character"
+  local src = ensureProfile(ns.profileName or ns.DEFAULT_PROFILE)
+  local copy = { assign = {}, disabled = {}, zones = {}, bosses = {}, volumes = {} }
+  for k, v in pairs(src.assign) do copy.assign[k] = v end
+  for k, v in pairs(src.disabled) do copy.disabled[k] = v end
+  for k, v in pairs(src.zones) do copy.zones[k] = { playlist = v.playlist, name = v.name } end
+  for k, v in pairs(src.bosses) do copy.bosses[k] = { playlist = v.playlist, name = v.name } end
+  for k, v in pairs(src.volumes) do copy.volumes[k] = v end
+  ns.db.profiles[char] = copy
+  ns.SetCharacterProfile(char)
+end
+
+function ns.DeleteProfile(name)
+  if name == ns.DEFAULT_PROFILE or not ns.db.profiles[name] then return end
+  ns.db.profiles[name] = nil
+  for char, p in pairs(ns.db.charProfiles) do
+    if p == name then ns.db.charProfiles[char] = nil end
+  end
+  if ns.profileName == name then ns.ActivateProfile(ns.DEFAULT_PROFILE) end
+end
+
+---------------------------------------------------------------------------
+-- Sharing playlists as text (base64 of "name\nid\nid...")
+---------------------------------------------------------------------------
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local function b64encode(data)
+  local out = {}
+  for i = 1, #data, 3 do
+    local a, b, c = data:byte(i, i + 2)
+    local n = a * 65536 + (b or 0) * 256 + (c or 0)
+    local s = ""
+    for j = 3, 0, -1 do
+      local idx = math.floor(n / 64 ^ j) % 64 + 1
+      s = s .. B64:sub(idx, idx)
+    end
+    if not b then s = s:sub(1, 2) .. "==" elseif not c then s = s:sub(1, 3) .. "=" end
+    out[#out + 1] = s
+  end
+  return table.concat(out)
+end
+local function b64decode(data)
+  data = data:gsub("[^%w%+/=]", "")
+  local out = {}
+  for i = 1, #data, 4 do
+    local chunk = data:sub(i, i + 3)
+    local n, pad = 0, 0
+    for j = 1, 4 do
+      local ch = chunk:sub(j, j)
+      local v
+      if ch == "=" or ch == "" then v = 0 pad = pad + 1 else v = (B64:find(ch, 1, true) or 1) - 1 end
+      n = n * 64 + v
+    end
+    local bytes = string.char(math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256)
+    out[#out + 1] = bytes:sub(1, 3 - pad)
+  end
+  return table.concat(out)
+end
+ns.Base64Encode, ns.Base64Decode = b64encode, b64decode
+
+local SHARE_PREFIX = "!KZZR1!"
+
+function ns.ExportPlaylist(name)
+  local ids = ns.db.playlists[name]
+  if type(ids) ~= "table" then return nil end
+  return SHARE_PREFIX .. b64encode(name .. "\n" .. table.concat(ids, "\n"))
+end
+
+-- Returns the new playlist name, the number of tracks found and the total, or nil + error key.
+function ns.ImportPlaylist(text)
+  text = (text or ""):gsub("%s", "")
+  if text:sub(1, #SHARE_PREFIX) ~= SHARE_PREFIX then return nil, "MSG_IMPORT_BAD" end
+  local ok, raw = pcall(b64decode, text:sub(#SHARE_PREFIX + 1))
+  if not ok or not raw or raw == "" then return nil, "MSG_IMPORT_BAD" end
+  local lines = {}
+  for line in (raw .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
+  local base = lines[1] ~= "" and lines[1] or "Imported"
+  local name, n = base, 2
+  while ns.FindPlaylist(name) do name = ("%s (%d)"):format(base, n) n = n + 1 end
+  local created = ns.CreatePlaylist(name)
+  if not created then return nil, "MSG_IMPORT_BAD" end
+  local found = {}
+  for i = 2, #lines do
+    if ns.trackById[lines[i]] then found[#found + 1] = lines[i] end
+  end
+  ns.SetManyInPlaylist(created, found, true)
+  return created, #found, #lines - 1
+end
+
+---------------------------------------------------------------------------
+-- Mode: "auto" (conditions) or free play of a playlist
 ---------------------------------------------------------------------------
 function ns.SetMode(mode)
   if mode ~= "auto" and not ns.GetPlaylist(mode) then return false end
@@ -330,17 +798,19 @@ function ns.SetMode(mode)
   if mode == "auto" then
     ns.Rules:Evaluate(true)
   else
+    ns.Player:SetConditionVolume(1) -- free play: the user's own volume
     ns.Player:SetPlaylist(mode)
   end
   ns.Fire("MODE_CHANGED", mode)
   return true
 end
 
--- Riproduzione libera a partire da un brano preciso.
+-- Free play starting from a specific track.
 function ns.PlayFrom(name, track)
   if not ns.GetPlaylist(name) then return end
   ns.db.mode = name
   ns.Rules:Reset()
+  ns.Player:SetConditionVolume(1)
   ns.Player:PlayTrack(name, track)
   ns.Fire("MODE_CHANGED", name)
 end
@@ -355,18 +825,18 @@ function ns.SetEnabled(on)
   ns.Fire("STATE_CHANGED")
 end
 
--- Salva la lingua scelta (nil = automatica). Serve /reload per applicarla.
+-- Saves the chosen language (nil = automatic). Needs /reload to apply.
 function ns.SetLanguage(code)
   if code ~= nil and not ns.LOCALES[code] then return false end
   ns.db.lang = code
   local name = code and ns.LANGUAGE_NAMES[code] or "auto"
-  if code and ns.CJK_LANG[code] then name = code end -- in chat i caratteri CJK potrebbero non vedersi
+  if code and ns.CJK_LANG[code] then name = code end -- CJK characters may not render in chat
   ns.Print("MSG_LANG_SET", name)
   return true
 end
 
 ---------------------------------------------------------------------------
--- Inizializzazione
+-- Initialization
 ---------------------------------------------------------------------------
 local function copyDefaults(dst, src)
   for k, v in pairs(src) do
@@ -379,60 +849,80 @@ local function copyDefaults(dst, src)
   return dst
 end
 
--- Stato interno per la diagnosi (/kzz debug); viene anche salvato in KZZR_DB.lastDebug.
+-- Internal state for diagnosis (/kzz debug); also saved to KZZR_DB.lastDebug.
 function ns.DebugLines()
   local function s(v) return tostring(v) end
   local lines = {
-    ("ZugZug Radio debug: versione %s, build %s, lingua %s (client %s), font addon %s"):format(
+    ("ZugZug Radio debug: version %s, build %s, language %s (client %s), addon font %s"):format(
       s(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")),
       s((select(2, GetBuildInfo()))), s(ns.lang), s(GetLocale and GetLocale()), s(ns.useAddonFont)),
-    ("  KZZR_Library: %s, brani in Library.lua: %s, brani caricati: %d, playlist: %d"):format(
+    ("  KZZR_Library: %s, tracks in Library.lua: %s, tracks loaded: %d, game music: %d, playlists: %d, mode: %s"):format(
       s(KZZR_Library ~= nil), s(KZZR_Library and KZZR_Library.tracks and #KZZR_Library.tracks),
-      #ns.tracks, ns.db and #ns.PlaylistNames() or -1),
-    ("  finestre: player %s, libreria %s, impostazioni %s, minimappa %s, minimappa visibile %s"):format(
+      #ns.tracks, #ns.gameTracks, ns.db and #ns.PlaylistNames() or -1, s(ns.db and ns.db.mode)),
+    ("  frames: player %s, library %s, settings %s, minimap button %s, minimap button visible %s"):format(
       s(_G.KalimdorZugZugRadioFrame ~= nil), s(_G.KalimdorZugZugLibraryFrame ~= nil),
       s(_G.KalimdorZugZugSettingsPanel ~= nil), s(_G.KalimdorZugZugRadioMinimapButton ~= nil),
       s(_G.KalimdorZugZugRadioMinimapButton and _G.KalimdorZugZugRadioMinimapButton:IsVisible())),
-    ("  Settings API: %s, categoria registrata: %s, Minimap: %s"):format(
+    ("  Settings API: %s, category registered: %s, Minimap: %s"):format(
       s(Settings ~= nil and Settings.RegisterCanvasLayoutCategory ~= nil), s(ns.Settings and ns.Settings:HasCategory()),
       s(Minimap ~= nil)),
   }
   local ok, mm = pcall(ns.Minimap.DebugInfo, ns.Minimap)
-  table.insert(lines, "  minimappa: " .. (ok and mm or ("errore: " .. tostring(mm))))
-  if #ns.startupErrors == 0 then table.insert(lines, "  nessun errore all'avvio") end
+  table.insert(lines, "  minimap: " .. (ok and mm or ("error: " .. tostring(mm))))
+  if #ns.startupErrors == 0 then table.insert(lines, "  no startup errors") end
   for _, e in ipairs(ns.startupErrors) do table.insert(lines, "|cffff4040  " .. e .. "|r") end
   return lines
 end
 
--- Ogni fase dell'avvio è isolata: un errore non blocca le altre e viene mostrato in chat
--- (WoW di default nasconde gli errori Lua).
+-- Each startup step is isolated: an error doesn't block the others and is shown in chat
+-- (WoW hides Lua errors by default).
 ns.startupErrors = {}
 local function step(label, fn)
   local ok, err = xpcall(fn, function(e) return tostring(e) .. "\n" .. (debugstack and debugstack(2, 6, 0) or "") end)
   if not ok then
     table.insert(ns.startupErrors, label .. ": " .. err)
-    print("|cffff4040ZugZug Radio - errore in " .. label .. "|r: " .. err)
+    print("|cffff4040ZugZug Radio - error in " .. label .. "|r: " .. err)
   end
 end
 
 ns.RegisterEvent("ADDON_LOADED", function(name)
   if name ~= ADDON then return end
+  ns.perfSince = GetTime()
   KZZR_DB = copyDefaults(KZZR_DB or {}, DEFAULTS)
   ns.db = KZZR_DB
-  ns.db.startupErrors = ns.startupErrors -- salvato su disco al /reload o logout, per la diagnosi
+  ns.db.startupErrors = ns.startupErrors -- written to disk on /reload or logout, for diagnosis
+  -- migration (<= 0.4): assignments lived directly in the DB; they become the Default profile
+  if not ns.db.profiles[ns.DEFAULT_PROFILE] then
+    ns.db.profiles[ns.DEFAULT_PROFILE] = { assign = ns.db.assign or {}, disabled = ns.db.disabled or {}, zones = {} }
+  end
+  ns.ActivateProfile(ns.DEFAULT_PROFILE) -- the character's profile is activated at PLAYER_LOGIN
+  ns.Player:InitVolume() -- also recovers from a fade/duck interrupted by a /reload
   step("InitLanguage", function() ns.InitLanguage(ns.db.lang) end)
+  step("Bindings", function() ns.SetupBindings() end)
   step("LoadLibrary", ns.LoadLibrary)
   if ns.db.mode ~= "auto" and not ns.GetPlaylist(ns.db.mode) then ns.db.mode = "auto" end
 end)
 
+-- The active profile's tables are only aliases: don't write them twice to SavedVariables.
+ns.RegisterEvent("PLAYER_LOGOUT", function()
+  pcall(function() ns.db.lastPerf = ns.PerfReport() end)
+  ns.Player:RestoreVolume()
+  ns.db.assign, ns.db.disabled, ns.db.zones, ns.db.bosses, ns.db.volumes = nil, nil, nil, nil, nil
+end)
+
 ns.RegisterEvent("PLAYER_LOGIN", function()
+  step("Profile", function()
+    local char = ns.CharacterKey()
+    ns.ActivateProfile(char and ns.db.charProfiles[char] or ns.DEFAULT_PROFILE)
+  end)
   step("UI", function() ns.UI:Build() end)
   step("LibraryUI", function() ns.LibraryUI:Build() end)
   step("Settings", function() ns.Settings:Build() end)
   step("Minimap", function() ns.Minimap:Build() end)
+  step("Banner", function() ns.Banner:Build() end)
   step("Rules", function() ns.Rules:Start() end)
   step("Debug", function() ns.db.lastDebug = ns.DebugLines() end)
-  if #ns.tracks == 0 then
+  if #ns.tracks == 0 and #ns.episodes == 0 then
     ns.Print("MSG_EMPTY_LIBRARY")
   elseif next(ns.db.playlists) == nil then
     ns.Print("MSG_NO_PLAYLISTS", #ns.tracks)
@@ -444,14 +934,41 @@ ns.RegisterEvent("PLAYER_LOGIN", function()
 end)
 
 ---------------------------------------------------------------------------
--- Comandi slash
+-- Key bindings (Bindings.xml) - names shown in the game's Key Bindings menu
+---------------------------------------------------------------------------
+local BINDINGS = {
+  KZZR_PLAY = "BIND_PLAY", KZZR_NEXT = "BIND_NEXT", KZZR_PREV = "BIND_PREV", KZZR_SKIP = "BIND_SKIP",
+  KZZR_VOLUP = "BIND_VOLUP", KZZR_VOLDOWN = "BIND_VOLDOWN", KZZR_PLAYER = "BIND_PLAYER",
+  KZZR_LIBRARY = "BIND_LIBRARY", KZZR_FAVORITE = "BIND_FAVORITE",
+}
+function ns.SetupBindings()
+  _G.BINDING_HEADER_KZZR = "Kalimdor ZugZug Radio"
+  for binding, key in pairs(BINDINGS) do _G["BINDING_NAME_" .. binding] = L[key] end
+end
+
+function KZZR_Binding(action)
+  local P = ns.Player
+  if action == "play" then P:Toggle()
+  elseif action == "next" then P:Next()
+  elseif action == "prev" then P:Prev()
+  elseif action == "skip" then P:SkipTrack(1)
+  elseif action == "volup" then P:SetVolume(P:GetVolume() + 0.1)
+  elseif action == "voldown" then P:SetVolume(P:GetVolume() - 0.1)
+  elseif action == "player" then ns.UI:Toggle()
+  elseif action == "library" then ns.LibraryUI:Toggle()
+  elseif action == "favorite" then ns.ToggleFavorite(P.track)
+  end
+end
+
+---------------------------------------------------------------------------
+-- Slash commands
 ---------------------------------------------------------------------------
 local function printStatus()
   ns.Print("STATUS_LINE", ns.db.mode == "auto" and CL.MODE_CONDITIONS or ns.PlaylistLabel(ns.db.mode, true),
     ns.db.enabled and CL.RADIO_ENABLED or CL.RADIO_DISABLED, ns.db.shuffle and CL.ON or CL.OFF)
   local active = ns.Rules:ActiveSet()
   for _, s in ipairs(ns.SITUATIONS) do
-    local assigned = ns.db.assign[s.key]
+    local assigned = ns.AssignedTo(s.key)
     print(("   %s%s|r -> %s"):format(active[s.key] and "|cff40ff40" or "|cff808080", ns.SituationLabel(s.key, true),
       assigned and (ns.PlaylistLabel(assigned, true) .. (ns.IsPlayable(assigned) and "" or CL.EMPTY_SUFFIX)) or "-"))
   end
@@ -496,11 +1013,24 @@ SlashCmdList.KZZRADIO = function(msg)
   elseif cmd == "minimap" then ns.Minimap:Toggle()
   elseif cmd == "lang" or cmd == "language" then languageCommand(rest)
   elseif cmd == "config" or cmd == "settings" or cmd == "options" then ns.Settings:Open()
+  elseif cmd == "stats" then
+    local played = 0
+    for _, st in pairs(ns.db.stats) do played = played + (st.plays or 0) end
+    ns.Print("MSG_STATS", ns.FormatDuration(ns.db.totalSeconds), played)
+    local top = ns.GetPlaylist(ns.TOP)
+    for i = 1, math.min(5, top and #top.tracks or 0) do
+      local t = top.tracks[i]
+      print(("   %d. %s  (%s)"):format(i, ns.TrackLabel(t), CL.PLAYS_FMT:format(ns.db.stats[t.file].plays)))
+    end
+  elseif cmd == "perf" then
+    if rest == "reset" then wipe(ns.perf) ns.perfSince = GetTime() end
+    ns.db.lastPerf = ns.PerfReport()
+    for _, line in ipairs(ns.db.lastPerf) do print(line) end
   elseif cmd == "debug" then
     ns.db.lastDebug = ns.DebugLines()
     for _, line in ipairs(ns.db.lastDebug) do print(line) end
-    print("  (salvato: fai /reload per scriverlo nel file SavedVariables\\KalimdorZugZugRadio.lua)")
+    print("  (saved: /reload to write it to SavedVariables\\KalimdorZugZugRadio.lua)")
   else
-    for i = 1, 10 do ns.Print("HELP_" .. i) end
+    for i = 1, 12 do ns.Print("HELP_" .. i) end
   end
 end

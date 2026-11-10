@@ -1,30 +1,30 @@
-# RadioProbe — test di compatibilità
+# RadioProbe: client compatibility probe
 
-Mini addon che verifica sul client WoW Forever quali API servono a Forever Radio.
+A tiny addon that checks, on the WoW Forever client, which APIs Kalimdor ZugZug Radio relies on.
+Use it again after a client patch to see whether anything changed.
 
-## Installazione
-1. I file di prova sono già in `media/`. I tre audio sono toni di altezza diversa, così capisci quale stai sentendo:
-   `test.mp3` è il più grave (330 Hz), `test.wav` medio (440 Hz), `test.ogg` il più acuto (523 Hz).
-3. Copia la cartella `RadioProbe` in `World of Warcraft/_forever_/Interface/AddOns/`
-   (se non esiste `_forever_`, guarda quale cartella `_xxx_` c'è e usa quella).
-4. **Riavvia completamente il client** (i file nuovi non vengono visti con /reload).
-5. Nella schermata personaggi → AddOns: abilita "Radio Probe" (spunta "carica addon non aggiornati" se serve).
+## Installation
+1. The test files are already in `media/`. The three audio files are tones of different pitch, so you can tell which one you hear:
+   `test.mp3` is the lowest (330 Hz), `test.wav` the middle one (440 Hz), `test.ogg` the highest (523 Hz).
+2. Copy the `RadioProbe` folder into `World of Warcraft/_forever_/Interface/AddOns/`.
+3. **Restart the client completely** (new files aren't picked up by /reload).
+4. In the character screen → AddOns, enable "Radio Probe".
 
-## Checklist dei test
-Al login stampa in chat build, API mancanti ed eventi. Poi:
+## Test checklist
+On login it prints the build, missing APIs and events in chat. Then:
 
-| Cosa fare | Comando / azione | Annota |
+| What to do | Command / action | Note down |
 |---|---|---|
-| Audio | `/rprobe sound` | Quali file hai **sentito** (ogg/mp3/wav) e se si fermano da soli dopo ~4s |
-| PlayMusic | `/rprobe music` poi `/rprobe stopmusic` | Si sente? La musica di zona si ferma? |
-| Copertine | `/rprobe tex` | Vedi il quadrato TGA? E il PNG? |
-| Combattimento | attacca un mob | Compaiono le righe `[combat]` con eventuali `<SECRET>` |
-| Élite / raro | attacca un élite o un raro nel mondo | Riga `[combat] UnitClassification(target)`: valore leggibile o `<SECRET>`? |
-| Boss | entra in un dungeon e ingaggia un boss | Arriva `ENCOUNTER_START`? (solo boss di istanza, non rari/élite) |
-| Volo | prendi un flight path | Compare `Stato taxi: false -> true`? |
-| Campfire | accendi un fuoco da campo, siediti, `/rprobe auras` | Nome e spellId dell'aura del fuoco |
-| Riepilogo | `/rprobe report` | Conteggio eventi ricevuti |
+| Audio | `/rprobe sound` | Which files you **heard** (ogg/mp3/wav) and whether they stop on their own after ~4s |
+| PlayMusic | `/rprobe music`, then `/rprobe stopmusic` | Can you hear it? Does the zone music stop? |
+| Covers | `/rprobe tex` | Can you see the TGA square? And the PNG one? |
+| Combat | attack a mob | `[combat]` lines appear, possibly with `<SECRET>` |
+| Elite / rare | attack an elite or rare in the open world | `[combat] UnitClassification(target)` line: readable value or `<SECRET>`? |
+| Boss | enter a dungeon and pull a boss | Does `ENCOUNTER_START` fire? (instance bosses only, not rares/elites) |
+| Flight | take a flight path | Does `State taxi: false -> true` appear? |
+| Campfire | light a campfire, sit down, `/rprobe auras` | Name and spellId of the fire's aura |
+| Summary | `/rprobe report` | Count of events received |
 
-## Inviare i risultati
-Fai `/reload` o esci dal gioco, poi mandami il file:
-`World of Warcraft/_forever_/WTF/Account/<NOME_ACCOUNT>/SavedVariables/RadioProbe.lua`
+## Sending the results
+`/reload` or log out, then share the file:
+`World of Warcraft/_forever_/WTF/Account/<ACCOUNT_NAME>/SavedVariables/RadioProbe.lua`

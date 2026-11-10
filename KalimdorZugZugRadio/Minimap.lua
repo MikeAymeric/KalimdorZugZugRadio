@@ -1,5 +1,5 @@
--- Minimap: pulsante sulla minimappa (trascinabile lungo il bordo) + voce dell'Addon Compartment.
--- Clic sinistro: player · Clic destro: libreria · Shift+clic: play/stop
+-- Minimap: minimap button (draggable along the edge) + Addon Compartment entry.
+-- Left-click: player · Right-click: library · Shift-click: play/stop · Ctrl-click: settings
 local _, ns = ...
 local L = ns.L
 
@@ -66,7 +66,7 @@ function MM:Build()
   if btn or not Minimap then return end
   btn = CreateFrame("Button", "KalimdorZugZugRadioMinimapButton", Minimap)
   btn:SetSize(31, 31)
-  -- sopra la minimappa e i suoi bordi, qualunque livello abbiano sul client
+  -- above the minimap and its borders, whatever level they have on this client
   btn:SetFrameStrata(Minimap:GetFrameStrata() == "BACKGROUND" and "LOW" or Minimap:GetFrameStrata())
   btn:SetFrameLevel(math.max(8, Minimap:GetFrameLevel() + 10))
   btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -99,7 +99,7 @@ function MM:Build()
   end)
   btn:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
 
-  -- icona "spenta" quando la radio non suona
+  -- greyed-out icon when the radio is silent
   ns.On("STATE_CHANGED", function() icon:SetDesaturated(not ns.Player.playing) end)
   icon:SetDesaturated(true)
 
@@ -108,12 +108,12 @@ function MM:Build()
 end
 
 function MM:DebugInfo()
-  if not btn then return "pulsante non creato" end
+  if not btn then return "button not created" end
   local function c(f)
     local x, y = f:GetCenter()
     return ("%s,%s"):format(x and math.floor(x) or "?", y and math.floor(y) or "?")
   end
-  return ("pulsante centro %s strata %s livello %d alpha %.2f | Minimap centro %s size %dx%d strata %s livello %d scala %.2f forma %s"):format(
+  return ("button center %s strata %s level %d alpha %.2f | Minimap center %s size %dx%d strata %s level %d scale %.2f shape %s"):format(
     c(btn), btn:GetFrameStrata(), btn:GetFrameLevel(), btn:GetEffectiveAlpha(),
     c(Minimap), Minimap:GetWidth(), Minimap:GetHeight(), Minimap:GetFrameStrata(), Minimap:GetFrameLevel(),
     Minimap:GetEffectiveScale(), tostring(GetMinimapShape and GetMinimapShape() or "ROUND"))
@@ -130,7 +130,7 @@ function MM:Toggle()
   ns.Print(ns.db.minimap.hide and "MSG_MINIMAP_HIDDEN" or "MSG_MINIMAP_SHOWN")
 end
 
--- Addon Compartment (menu addon della minimappa nel client moderno), dichiarato nel .toc.
+-- Addon Compartment (the minimap addon menu in the modern client), declared in the .toc.
 function KZZR_OnCompartmentClick(_, mouseButton) onClick(mouseButton) end
 function KZZR_OnCompartmentEnter(_, frame) showTooltip(frame) end
 function KZZR_OnCompartmentLeave() ns.HideTooltip() end

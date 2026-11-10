@@ -1,4 +1,4 @@
-// Controllo sintassi Lua 5.1 di tutti i file dell'addon (non c'è un interprete Lua locale).
+// Lua 5.1 syntax check of every addon file (there is no local Lua interpreter).
 const luaparse = require("luaparse"), fs = require("fs"), path = require("path");
 let bad = 0;
 for (const dir of ["KalimdorZugZugRadio", "RadioProbe"]) {

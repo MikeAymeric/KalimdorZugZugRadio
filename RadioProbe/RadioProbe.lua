@@ -1,5 +1,5 @@
--- RadioProbe: verifica quali API/eventi servono a Forever Radio funzionano sul client.
--- Tutto è protetto da pcall: su un client sconosciuto non vogliamo errori Lua.
+-- RadioProbe: checks which of the APIs/events Kalimdor ZugZug Radio needs work on the client.
+-- Everything is wrapped in pcall: on an unknown client we don't want Lua errors.
 
 local ADDON = ...
 local MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
@@ -45,20 +45,20 @@ local function cvar(name)
 end
 
 ---------------------------------------------------------------------------
--- 1. API disponibili
+-- 1. Available APIs
 ---------------------------------------------------------------------------
 local APIS = {
   -- audio
   "PlaySoundFile", "StopSound", "PlaySound", "PlayMusic", "StopMusic", "SOUNDKIT",
-  -- situazioni
+  -- conditions
   "UnitOnTaxi", "IsInInstance", "IsResting", "IsMounted", "IsSwimming", "IsFlying",
   "InCombatLockdown", "UnitAffectingCombat", "UnitClassification", "UnitExists",
   "GetZoneText", "GetSubZoneText", "C_Map.GetBestMapForUnit",
-  -- aure
+  -- auras
   "C_UnitAuras.GetAuraDataByIndex", "C_UnitAuras.GetPlayerAuraBySpellID", "UnitAura", "AuraUtil.ForEachAura",
-  -- restrizioni Midnight
+  -- Midnight restrictions
   "issecretvalue", "canaccessvalue",
-  -- utilità / UI
+  -- utilities / UI
   "C_Timer.After", "C_Timer.NewTicker", "GetTime", "MenuUtil.CreateContextMenu",
   "UIDropDownMenu_Initialize", "C_XMLUtil.GetTemplateInfo", "Settings.RegisterCanvasLayoutCategory",
 }
@@ -70,7 +70,7 @@ local function reportApis()
   for _, name in ipairs(APIS) do
     if resolve(name) == nil then missing[#missing + 1] = name end
   end
-  out("API mancanti: %s", #missing == 0 and "nessuna" or table.concat(missing, ", "))
+  out("Missing APIs: %s", #missing == 0 and "none" or table.concat(missing, ", "))
 
   local getTpl = resolve("C_XMLUtil.GetTemplateInfo")
   for _, tpl in ipairs({ "WowStyle1DropdownTemplate", "UIDropDownMenuTemplate", "UIPanelButtonTemplate" }) do
@@ -86,7 +86,7 @@ local function reportApis()
 end
 
 ---------------------------------------------------------------------------
--- 2. Eventi: registrazione + conteggio
+-- 2. Events: registration + counting
 ---------------------------------------------------------------------------
 local EVENTS = {
   "ENCOUNTER_START", "ENCOUNTER_END", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "BOSS_KILL",
@@ -108,41 +108,41 @@ end
 pcall(frame.RegisterEvent, frame, "ADDON_LOADED")
 
 local function reportEvents()
-  out("Eventi NON registrabili: %s", #regFailed == 0 and "nessuno" or table.concat(regFailed, ", "))
+  out("Events that can NOT be registered: %s", #regFailed == 0 and "none" or table.concat(regFailed, ", "))
   local parts = {}
   for _, ev in ipairs(EVENTS) do parts[#parts + 1] = ev .. "=" .. (counts[ev] or 0) end
-  out("Eventi ricevuti: %s", table.concat(parts, " "))
+  out("Events received: %s", table.concat(parts, " "))
 end
 
 ---------------------------------------------------------------------------
--- 3. Aure (per il campfire: aura "Cozy Fire" / "Fuoco accogliente")
+-- 3. Auras (for the campfire condition)
 ---------------------------------------------------------------------------
 local function scanAuras(tag)
   tag = tag or "auras"
   local get = resolve("C_UnitAuras.GetAuraDataByIndex")
-  if not get then out("[%s] C_UnitAuras.GetAuraDataByIndex mancante", tag) return end
+  if not get then out("[%s] C_UnitAuras.GetAuraDataByIndex missing", tag) return end
   local n = 0
   for i = 1, 40 do
     local ok, a = pcall(get, "player", i, "HELPFUL")
-    if not ok then out("[%s] errore indice %d: %s", tag, i, a) return end
+    if not ok then out("[%s] error at index %d: %s", tag, i, a) return end
     if not a then break end
     n = n + 1
     out("[%s] %d: %s  spellId=%s", tag, i, a.name, a.spellId)
   end
-  out("[%s] %d aure benefiche trovate", tag, n)
+  out("[%s] %d helpful auras found", tag, n)
 end
 
 ---------------------------------------------------------------------------
--- 4. Snapshot "secret values" in combattimento
+-- 4. "Secret values" snapshot in combat
 ---------------------------------------------------------------------------
 local function combatSnapshot()
   local function probe(label, fn, ...)
-    -- niente test booleani sul valore: un secret value potrebbe generare errore
+    -- no boolean tests on the value: a secret value could raise an error
     local ok, v = pcall(fn, ...)
     if ok then
       out("[combat] %s -> %s", label, v)
     else
-      out("[combat] %s -> ERRORE: %s", label, v)
+      out("[combat] %s -> ERROR: %s", label, v)
     end
   end
   probe("UnitHealth(player)", UnitHealth, "player")
@@ -157,7 +157,7 @@ local function combatSnapshot()
 end
 
 ---------------------------------------------------------------------------
--- 5. Polling di stato (volo, riposo, montatura, istanza)
+-- 5. State polling (flight, resting, mount, instance)
 ---------------------------------------------------------------------------
 local lastState = {}
 local STATE_FUNCS = {
@@ -174,14 +174,14 @@ local function pollState()
     local ok, v = pcall(fn)
     v = ok and safe(v) or "<err>"
     if lastState[key] ~= v then
-      if lastState[key] ~= nil then out("Stato %s: %s -> %s", key, lastState[key], v) end
+      if lastState[key] ~= nil then out("State %s: %s -> %s", key, lastState[key], v) end
       lastState[key] = v
     end
   end
 end
 
 ---------------------------------------------------------------------------
--- 6. Test audio
+-- 6. Audio test
 ---------------------------------------------------------------------------
 local function after(sec, fn)
   if C_Timer and C_Timer.After then C_Timer.After(sec, fn) end
@@ -189,7 +189,7 @@ end
 
 local function testSoundFile(file, channel)
   local ok, willPlay, handle = pcall(PlaySoundFile, MEDIA .. file, channel)
-  if not ok then out("PlaySoundFile(%s, %s) ERRORE: %s", file, channel, willPlay) return end
+  if not ok then out("PlaySoundFile(%s, %s) ERROR: %s", file, channel, willPlay) return end
   out("PlaySoundFile(%s, %s) -> willPlay=%s handle=%s", file, channel, willPlay, handle)
   if handle and StopSound then
     after(4, function()
@@ -200,27 +200,27 @@ local function testSoundFile(file, channel)
 end
 
 local function testSounds()
-  out("CVar musica: EnableMusic=%s MusicVolume=%s (devono essere >0 per sentire il canale Music)",
+  out("Music CVars: EnableMusic=%s MusicVolume=%s (must be >0 to hear the Music channel)",
     cvar("Sound_EnableMusic"), cvar("Sound_MusicVolume"))
-  -- suono di sistema: verifica handle/StopSound indipendentemente dai file custom
+  -- system sound: checks handle/StopSound independently of the custom files
   local kit = (SOUNDKIT and SOUNDKIT.READY_CHECK) or 8960
   local ok, willPlay, handle = pcall(PlaySound, kit, "Master")
   out("PlaySound(READY_CHECK) -> ok=%s willPlay=%s handle=%s", ok, willPlay, handle)
-  -- file custom, uno ogni 5 secondi; ognuno viene fermato dopo 4s
+  -- custom files, one every 5 seconds; each one is stopped after 4s
   local files = { "test.ogg", "test.mp3", "test.wav" }
   for i, f in ipairs(files) do
     after(1 + (i - 1) * 5, function() testSoundFile(f, "Music") end)
   end
-  after(16, function() out("Test audio finito: annota quali file hai SENTITO e se si sono fermati da soli.") end)
+  after(16, function() out("Audio test finished: note which files you HEARD and whether they stopped on their own.") end)
 end
 
 local function testMusic()
   local ok, err = pcall(PlayMusic, MEDIA .. "test.ogg")
-  out("PlayMusic(test.ogg) -> %s. La musica di zona si è fermata? Usa /rprobe stopmusic", ok and "chiamata ok" or err)
+  out("PlayMusic(test.ogg) -> %s. Did the zone music stop? Use /rprobe stopmusic", ok and "call ok" or err)
 end
 
 ---------------------------------------------------------------------------
--- 7. Test texture (TGA e PNG)
+-- 7. Texture test (TGA and PNG)
 ---------------------------------------------------------------------------
 local texFrame
 local function testTextures()
@@ -241,18 +241,18 @@ local function testTextures()
     tex:SetSize(256, 256)
     tex:SetPoint("TOPLEFT", x, -16)
     local ok, res = pcall(tex.SetTexture, tex, MEDIA .. file)
-    out("SetTexture(%s) -> ok=%s ritorno=%s", file, ok, res)
+    out("SetTexture(%s) -> ok=%s returned=%s", file, ok, res)
     local label = texFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetPoint("TOP", tex, "BOTTOM", 0, -6)
     label:SetText(file)
   end
   addTex("test.tga", 16)
   addTex("test.png", 288)
-  out("Finestra texture aperta (clic per chiudere). Annota quali immagini vedi.")
+  out("Texture window open (click to close). Note which images you can see.")
 end
 
 ---------------------------------------------------------------------------
--- Eventi
+-- Events
 ---------------------------------------------------------------------------
 frame:SetScript("OnEvent", function(_, ev, ...)
   if ev == "ADDON_LOADED" then
@@ -276,18 +276,18 @@ frame:SetScript("OnEvent", function(_, ev, ...)
     local n = select("#", ...)
     local args = {}
     for i = 1, math.min(n, 5) do args[i] = safe((select(i, ...))) end
-    out("Evento %s (#%d) args: %s", ev, counts[ev], table.concat(args, ", "))
+    out("Event %s (#%d) args: %s", ev, counts[ev], table.concat(args, ", "))
   end
 
   if ev == "PLAYER_ENTERING_WORLD" and counts[ev] == 1 then
     reportApis()
     reportEvents()
-    out("Comandi: /rprobe report | sound | music | stopmusic | tex | auras | clear")
+    out("Commands: /rprobe report | sound | music | stopmusic | tex | auras | clear")
     if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(2, pollState) end
   elseif ev == "PLAYER_REGEN_DISABLED" then
     after(1, combatSnapshot)
   elseif ev == "PLAYER_CONTROL_LOST" then
-    after(1, function() out("Dopo CONTROL_LOST: UnitOnTaxi=%s", UnitOnTaxi and UnitOnTaxi("player")) end)
+    after(1, function() out("After CONTROL_LOST: UnitOnTaxi=%s", UnitOnTaxi and UnitOnTaxi("player")) end)
   end
 end)
 
@@ -299,10 +299,10 @@ SlashCmdList.RADIOPROBE = function(msg)
   local cmd = (msg or ""):lower():match("^%s*(%S*)")
   if cmd == "sound" then testSounds()
   elseif cmd == "music" then testMusic()
-  elseif cmd == "stopmusic" then pcall(StopMusic) out("StopMusic chiamato")
+  elseif cmd == "stopmusic" then pcall(StopMusic) out("StopMusic called")
   elseif cmd == "tex" then testTextures()
   elseif cmd == "auras" then scanAuras()
-  elseif cmd == "clear" then wipe(log) out("Log svuotato")
+  elseif cmd == "clear" then wipe(log) out("Log cleared")
   else reportApis() reportEvents()
   end
 end

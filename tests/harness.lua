@@ -1,4 +1,4 @@
--- Stub minimale delle API WoW per testare la logica dell'addon fuori dal gioco.
+-- Minimal WoW API stubs to test the addon logic outside the game.
 local now = 0
 local timers = {}
 function GetTime() return now end
@@ -101,22 +101,54 @@ C_UnitAuras = { GetPlayerAuraBySpellID = function(id)
   if G.combat then error("Auras cannot be accessed when secret") end
   return G.auras[id] and { spellId = id } or nil
 end }
-C_CVar = { GetCVar = function() return "1" end }
 playing = nil
 function PlayMusic(p) playing = p end
 function StopMusic() playing = nil end
 function fire(e, ...)
   for _, f in ipairs(eventFrames[e] or {}) do rawget(f, "_OnEvent")(f, e, ...) end
+  advance(0) -- next frame: coalesced evaluations run here
 end
+-- new APIs used by the newer conditions/features
+function UnitName() return "Tester" end
+function GetRealmName() return "Realm" end
+G.hour = 12; G.map = 1411; G.swimming = false; G.mounted = false; G.flying = false; G.dead = false; G.channel = nil
+function GetGameTime() return G.hour, 0 end
+function IsSwimming() return G.swimming end
+function IsMounted() return G.mounted end
+function IsFlying() return G.flying end
+function UnitIsDeadOrGhost() return G.dead end
+function UnitChannelInfo() return G.channel end
+MAPS = { [1411] = { name = "Durotar", mapType = 3, parentMapID = 12 }, [12] = { name = "Kalimdor", mapType = 2, parentMapID = 947 },
+         [1454] = { name = "Orgrimmar", mapType = 3, parentMapID = 1411 } }
+C_Map = { GetBestMapForUnit = function() return G.map end, GetMapInfo = function(id) return MAPS[id] end }
+C_Spell = { GetSpellName = function(id) if id == 7620 or id == 131474 then return "Fishing" end return "Other" end }
+musicVolume = "0.8"
+C_CVar = { GetCVar = function(k) if k == "Sound_MusicVolume" then return musicVolume end return "1" end,
+           SetCVar = function(k, v) if k == "Sound_MusicVolume" then musicVolume = v end end }
+local fakeClock = 0
+function debugprofilestop() fakeClock = fakeClock + 0.01 return fakeClock end
+function UpdateAddOnMemoryUsage() end
+G.afk = false
+function UnitIsAFK() return G.afk end
+function GetAddOnMemoryUsage() return 321 end
+ChatFrame1 = stub()
 
 KZZR_Library = { tracks = {
   { file = "music\\a.ogg", folder = "", title = "A", artist = "X", duration = 10 },
   { file = "music\\b.ogg", folder = "", title = "B", duration = 10 },
   { file = "music\\c.mp3", folder = "Rock", title = "C", duration = 10 },
+  { file = "music/Podcast/P/e1/part_000.ogg", folder = "Podcast/Pod", title = "Ep 1", artist = "Pod", album = "2026-11-09", duration = 150, episode = "k1", part = 1, parts = 3 },
+  { file = "music/Podcast/P/e1/part_001.ogg", folder = "Podcast/Pod", title = "Ep 1", artist = "Pod", album = "2026-11-09", duration = 150, episode = "k1", part = 2, parts = 3 },
+  { file = "music/Podcast/P/e1/part_002.ogg", folder = "Podcast/Pod", title = "Ep 1", artist = "Pod", album = "2026-11-09", duration = 90, episode = "k1", part = 3, parts = 3 },
 } }
 
+KZZR_GameMusic = {
+  { fid = 53198, title = "Orgrimmar 01 Zone", folder = "WoW Classic/Cities/Orgrimmar", duration = 68.89, icon = 135759 },
+  { fid = 8158670, title = "Hyjal General A", folder = "WoW Forever/New zones", duration = 120, icon = 136096 },
+}
+
 local ns = {}
-for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Minimap" }) do
+for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Minimap", "Banner" }) do
   assert(load(SRC[f], f))("KalimdorZugZugRadio", ns)
 end
 local fails = 0
@@ -125,100 +157,381 @@ local function check(label, cond)
   print((cond and "PASS " or "FAIL ") .. label .. (cond and "" or
     ("   playing=" .. tostring(playing) .. " pl=" .. tostring(ns.Player.playlist) .. " cur=" .. tostring(ns.Rules.current))))
 end
-local function is(name) return playing ~= nil and playing:find(name, 1, true) ~= nil end
+local function is(name) return playing ~= nil and tostring(playing):find(name, 1, true) ~= nil end
 
 fire("ADDON_LOADED", "KalimdorZugZugRadio"); fire("PLAYER_LOGIN"); fire("PLAYER_ENTERING_WORLD", true, false)
-check("nessuna assegnazione -> silenzio", playing == nil)
+ns.db.crossfade = false -- tested separately below
+check("no assignments -> silence", playing == nil)
 ns.db.shuffle = false
-assert(ns.CreatePlaylist("Esplora")); assert(ns.CreatePlaylist("Botte"))
-check("nome duplicato rifiutato", ns.CreatePlaylist("esplora") == nil)
-ns.SetInPlaylist("Esplora", "music\\a.ogg", true); ns.SetInPlaylist("Esplora", "music\\b.ogg", true)
-ns.SetManyInPlaylist("Botte", { "music\\c.mp3" }, true)
-ns.Assign("idle", "Esplora"); ns.Assign("combat", "Botte")
-check("nessuna condizione suona Esplora", is("music\\a.ogg"))
+assert(ns.CreatePlaylist("Explore")); assert(ns.CreatePlaylist("Fight"))
+check("duplicate name rejected", ns.CreatePlaylist("explore") == nil)
+ns.SetInPlaylist("Explore", "music\\a.ogg", true); ns.SetInPlaylist("Explore", "music\\b.ogg", true)
+ns.SetManyInPlaylist("Fight", { "music\\c.mp3" }, true)
+ns.Assign("idle", "Explore"); ns.Assign("combat", "Fight")
+check("No condition plays Explore", is("music\\a.ogg"))
 G.combat = true; fire("PLAYER_REGEN_DISABLED")
-check("combattimento immediato -> Botte", is("c.mp3"))
+check("combat switches immediately -> Fight", is("c.mp3"))
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(1)
-check("ritorno ritardato", is("c.mp3"))
+check("delayed return", is("c.mp3"))
 advance(5)
-check("torna a Esplora e riparte A", is("a.ogg"))
+check("back to Explore, A restarts", is("a.ogg"))
 advance(11)
-check("avanza da solo a B", is("b.ogg"))
+check("auto-advances to B", is("b.ogg"))
 
-ns.CreatePlaylist("Fuoco"); ns.SetInPlaylist("Fuoco", "music\\c.mp3", true); ns.Assign("campfire", "Fuoco")
+ns.CreatePlaylist("Fire"); ns.SetInPlaylist("Fire", "music\\c.mp3", true); ns.Assign("campfire", "Fire")
 G.auras[1283391] = true; fire("UNIT_AURA", "player")
-check("solo Campfire Nearby -> niente campfire", playing and not is("c.mp3"))
+check("only Campfire Nearby -> no campfire", playing and not is("c.mp3"))
 G.auras[1229739] = true; fire("UNIT_AURA", "player")
-check("entrambe le aure -> campfire", is("c.mp3"))
+check("both auras -> campfire", is("c.mp3"))
 G.auras[1229739] = nil; fire("UNIT_AURA", "player"); advance(20)
-check("Welcoming scaduta, campfire resta", ns.Rules.current == "campfire")
+check("Welcoming expired, campfire stays", ns.Rules.current == "campfire")
 G.speed = 7; advance(1.1); G.speed = 0; advance(5)
-check("movimento chiude campfire", ns.Rules.current == "idle")
+check("moving ends the campfire", ns.Rules.current == "idle")
 G.auras[1283391] = nil; fire("UNIT_AURA", "player")
 
 ns.PlayFrom(ns.ALL, ns.trackById["music\\c.mp3"])
-check("riproduzione libera dal brano C", is("c.mp3") and ns.db.mode == ns.ALL)
+check("free play from track C", is("c.mp3") and ns.db.mode == ns.ALL)
 G.combat = true; fire("PLAYER_REGEN_DISABLED")
-check("riproduzione libera ignora il combattimento", ns.Player.playlist == ns.ALL)
+check("free play ignores combat", ns.Player.playlist == ns.ALL)
 G.combat = false; fire("PLAYER_REGEN_ENABLED")
 ns.SetMode("auto"); advance(5)
-check("torna ad automatico", ns.Rules.current == "idle")
+check("back to automatic", ns.Rules.current == "idle")
 
 ns.Player:Stop(true); G.combat = true; fire("PLAYER_REGEN_DISABLED")
-check("stop dell'utente rispettato", playing == nil)
-ns.Player:Toggle(); check("play riprende col combattimento", is("c.mp3"))
+check("user stop respected", playing == nil)
+ns.Player:Toggle(); check("play resumes with combat", is("c.mp3"))
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(5)
 
-ns.RenamePlaylist("Esplora", "Giro")
-check("rinomina mantiene l'assegnazione", ns.db.assign.idle == "Giro" and ns.Player.playlist == "Giro")
-ns.DeletePlaylist("Giro"); advance(5)
-check("elimina -> silenzio", playing == nil and ns.db.assign.idle == nil)
+ns.RenamePlaylist("Explore", "Tour")
+check("rename keeps the assignment", ns.db.assign.idle == "Tour" and ns.Player.playlist == "Tour")
+ns.DeletePlaylist("Tour"); advance(5)
+check("delete -> silence", playing == nil and ns.db.assign.idle == nil)
 
-ns.Assign("idle", "Botte"); ns.SetInPlaylist("Botte", "music\\a.ogg", true)
-ns.SetInPlaylist("Botte", "music\\c.mp3", false)
-check("tolto il brano in corso -> passa a un altro", is("a.ogg"))
+ns.Assign("idle", "Fight"); ns.SetInPlaylist("Fight", "music\\a.ogg", true)
+ns.SetInPlaylist("Fight", "music\\c.mp3", false)
+check("current track removed -> switches to another", is("a.ogg"))
 
 ns.LibraryUI:Toggle(true); ns.LibraryUI:Refresh(); ns.UI:Refresh(); ns.UI:RefreshProgress()
 SlashCmdList.KZZRADIO("status"); SlashCmdList.KZZRADIO("playlist tutti"); SlashCmdList.KZZRADIO("shuffle")
-check("/kzz playlist tutti", ns.db.mode == ns.ALL)
--- minimappa / addon compartment
+check("/kzz playlist tutti (any language's 'all' keyword)", ns.db.mode == ns.ALL)
+-- minimap / addon compartment
 local uiShown = KalimdorZugZugRadioFrame:IsShown()
 KZZR_OnCompartmentClick("KalimdorZugZugRadio", "LeftButton")
-check("compartment clic sinistro -> player", KalimdorZugZugRadioFrame:IsShown() ~= uiShown)
+check("compartment left-click -> player", KalimdorZugZugRadioFrame:IsShown() ~= uiShown)
 local libShown = KalimdorZugZugLibraryFrame:IsShown()
 KZZR_OnCompartmentClick("KalimdorZugZugRadio", "RightButton")
-check("compartment clic destro -> libreria", KalimdorZugZugLibraryFrame:IsShown() ~= libShown)
+check("compartment right-click -> library", KalimdorZugZugLibraryFrame:IsShown() ~= libShown)
 local wasPlaying = ns.Player.playing
 shift = true; KZZR_OnCompartmentClick("KalimdorZugZugRadio", "LeftButton"); shift = false
-check("shift+clic -> play/stop", ns.Player.playing ~= wasPlaying)
+check("shift-click -> play/stop", ns.Player.playing ~= wasPlaying)
 KZZR_OnCompartmentEnter("KalimdorZugZugRadio", stub()); KZZR_OnCompartmentLeave()
 SlashCmdList.KZZRADIO("minimap")
-check("/kzz minimap nasconde", ns.db.minimap.hide == true)
--- impostazioni: condizioni attivabili e apertura del pannello
-ns.SetMode("auto"); ns.Assign("idle", "Botte"); advance(5)
-check("auto con Nessuna condizione = Botte", is("a.ogg"))
+check("/kzz minimap hides the button", ns.db.minimap.hide == true)
+-- settings: toggleable conditions and opening the panel
+ns.SetMode("auto"); ns.Assign("idle", "Fight"); advance(5)
+check("auto with No condition = Fight", is("a.ogg"))
 ns.SetConditionEnabled("idle", false); advance(5)
-check("condizione disattivata -> silenzio", playing == nil and ns.PlaylistFor("idle") == nil)
+check("disabled condition -> silence", playing == nil and ns.PlaylistFor("idle") == nil)
 ns.SetConditionEnabled("idle", true); advance(5)
-check("condizione riattivata -> riprende", is("a.ogg"))
+check("re-enabled condition -> resumes", is("a.ogg"))
 ns.db.disabled.combat = true; G.combat = true; fire("PLAYER_REGEN_DISABLED")
-check("combattimento disattivato non interrompe", is("a.ogg"))
+check("disabled combat condition doesn't interrupt", is("a.ogg"))
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); ns.db.disabled.combat = nil
 ctrl = true; KZZR_OnCompartmentClick("KalimdorZugZugRadio", "LeftButton"); ctrl = false
-check("ctrl+clic apre le impostazioni", settingsOpened == "Kalimdor ZugZug Radio")
+check("ctrl-click opens the settings", settingsOpened == "Kalimdor ZugZug Radio")
 settingsOpened = nil; SlashCmdList.KZZRADIO("config")
-check("/kzz config apre le impostazioni", settingsOpened == "Kalimdor ZugZug Radio")
+check("/kzz config opens the settings", settingsOpened == "Kalimdor ZugZug Radio")
 settingsOpened = nil; G.combat = true; SlashCmdList.KZZRADIO("config"); G.combat = false
-check("in combattimento non apre", settingsOpened == nil)
+check("doesn't open in combat", settingsOpened == nil)
 blizzardSettingsWorks = false; rawset(SettingsPanel, "_shown", false); settingsOpened = nil
-KalimdorZugZugSettingsPanel:Hide() -- il canvas resta nascosto se Blizzard non seleziona la categoria
+KalimdorZugZugSettingsPanel:Hide() -- the canvas stays hidden if Blizzard doesn't select the category
 SlashCmdList.KZZRADIO("config")
-check("Opzioni Blizzard non si aprono -> finestra autonoma", ns.Settings.standalone and KalimdorZugZugSettingsPanel:IsShown()
-  and ns.db.lastSettingsOpen[#ns.db.lastSettingsOpen]:find("finestra autonoma"))
+check("Blizzard Options don't open -> standalone window", ns.Settings.standalone and KalimdorZugZugSettingsPanel:IsShown()
+  and ns.db.lastSettingsOpen[#ns.db.lastSettingsOpen]:find("standalone window"))
 KalimdorZugZugSettingsPanel:Show(); ns.Settings:Refresh(); ns.Minimap:SetShown(true)
-check("minimappa visibile dalle impostazioni", ns.db.minimap.hide == false)
+check("minimap button shown from the settings", ns.db.minimap.hide == false)
 
--- traduzioni: ogni lingua ha tutte le chiavi inglesi con gli stessi segnaposto
+-- in-game music
+check("game music loaded and WoW music playlist", #ns.gameTracks == 2 and ns.IsPlayable(ns.GAME)
+  and ns.AllPlaylistNames()[2] == ns.GAME and ns.FindPlaylist("wow") == ns.GAME)
+ns.PlayFrom(ns.GAME, ns.trackById["game:53198"])
+check("game music played via FileDataID", playing == 53198 and ns.CoverOf(ns.Player.track) == 135759)
+ns.CreatePlaylist("Horde"); ns.SetInPlaylist("Horde", "game:53198", true); ns.SetInPlaylist("Horde", "music\\b.ogg", true)
+ns.SetMode("auto"); ns.Assign("idle", "Horde"); advance(5)
+check("user playlist with game music and own tracks", ns.Player.playlist == "Horde" and (playing == 53198 or is("b.ogg")))
+-- precedence: manual next/previous = free play, conditions don't interrupt
+ns.Player:Next()
+check("manual next -> free play", ns.db.mode == "Horde")
+local before = playing
+G.combat = true; ns.Assign("combat", "Fight"); fire("PLAYER_REGEN_DISABLED")
+check("elite/combat doesn't interrupt the manual choice", playing == before and ns.Player.playlist == "Horde")
+G.combat = false; fire("PLAYER_REGEN_ENABLED")
+ns.SetMode("auto"); advance(5)
+check("returned to automatic", ns.db.mode == "auto")
+advance(130)
+check("automatic end of track doesn't switch to free play", ns.db.mode == "auto")
+
+-- podcast: an episode split into parts, resumed from the saved part
+local ep = ns.trackById["ep:k1"]
+check("episode = a single item with 3 parts", ep and #ep.parts == 3 and ep.duration == 390 and #ns.episodes == 1
+  and ns.IsPlayable(ns.PODCAST) and ns.FindPlaylist("podcast") == ns.PODCAST and ns.trackById[ep.parts[1].file] == nil)
+check("podcasts are not in Whole library", not ns.GetPlaylist(ns.ALL).has[ep.file] and ns.GetPlaylist(ns.PODCAST).has[ep.file])
+ns.CreatePlaylist("Mix"); ns.SetInPlaylist("Mix", ep.file, true)
+check("an episode can still be added to a user playlist", ns.IsPlayable("Mix") and ns.GetPlaylist("Mix").tracks[1] == ep)
+ns.DeletePlaylist("Mix")
+ns.PlayFrom(ns.PODCAST, ep)
+check("part 1", is("part_000") and ns.Player.part == 1)
+advance(151)
+check("end of part -> part 2, progress saved", is("part_001") and ns.db.podcastProgress["ep:k1"].part == 2)
+advance(10)
+check("time since the start of the episode", math.abs(ns.Player:Elapsed() - 160) < 1)
+ns.Player:Stop(true); ns.SetMode("auto"); advance(5)
+ns.PlayFrom(ns.PODCAST, ep)
+check("resumes from part 2 after stop/switch", is("part_001"))
+ns.Player:Next()
+check("next = next part", is("part_002"))
+advance(1); ns.Player:Prev()
+check("previous within 3s = previous part", is("part_001"))
+advance(10); ns.Player:Prev()
+check("previous after 3s = restart the part", is("part_001") and ns.Player:ElapsedInPart() < 1)
+ns.Player:Next(); advance(91)
+-- the only episode in the queue: once finished, the queue starts it again from part 1
+check("episode finished -> starts over", is("part_000") and ns.Player.part == 1)
+ns.Player:Stop(true); ns.SetEpisodePart(ep, 1, true)
+ns.PlayFrom(ns.PODCAST, ep)
+check("episode marked done restarts from the beginning", is("part_000"))
+ns.SetMode("auto"); advance(5)
+
+-- free play warning in the settings
+ns.SetMode(ns.ALL); KalimdorZugZugSettingsPanel:Show(); ns.Settings:Refresh()
+check("free play -> warning shown in the settings", KalimdorZugZugSettingsPanel.freeWarn:IsShown())
+ns.SetMode("auto"); ns.Settings:Refresh()
+check("automatic -> warning hidden", not KalimdorZugZugSettingsPanel.freeWarn:IsShown())
+
+-- player skins
+check("classic skin by default", (ns.db.ui.skin or "classic") == "classic" and ns.UI:HasClassicDecorations())
+ns.UI:SetSkin("modern"); ns.UI:Refresh()
+check("switch to modern skin", ns.db.ui.skin == "modern" and ns.UI.statusFont == "GameFontNormalSmall")
+ns.UI:SetSkin("classic"); ns.UI:Refresh()
+check("back to classic skin", ns.db.ui.skin == "classic" and ns.UI.statusFont == "GameFontNormal")
+
+-- new conditions
+ns.SetMode("auto")
+ns.CreatePlaylist("Special"); ns.SetInPlaylist("Special", "music\\c.mp3", true)
+for _, key in ipairs({ "swimming", "mounted", "night", "dead", "fishing", "pvp", "levelup" }) do ns.Assign(key, "Special") end
+advance(5)
+local function cur() return ns.Rules.current end
+G.swimming = true; advance(1.1)
+check("swimming condition", cur() == "swimming")
+G.swimming = false; advance(5.1)
+G.mounted = true; advance(1.1)
+check("ground mount condition", cur() == "mounted")
+G.flying = true; advance(5.1)
+check("flying mount is not 'mounted (ground)'", cur() ~= "mounted")
+G.flying = false; G.mounted = false; advance(5.1)
+G.hour = 23; advance(1.1)
+check("night condition (game time 23:00)", cur() == "night")
+G.hour = 12; advance(5.1)
+G.dead = true; fire("PLAYER_DEAD")
+check("dead / ghost condition", cur() == "dead")
+G.dead = false; fire("PLAYER_ALIVE"); advance(5)
+G.channel = "Fishing"; fire("UNIT_SPELLCAST_CHANNEL_START", "player", "guid", 131474)
+check("fishing condition", cur() == "fishing")
+G.channel = nil; fire("UNIT_SPELLCAST_CHANNEL_STOP", "player"); advance(10)
+check("still fishing between two casts", cur() == "fishing")
+advance(16)
+check("fishing ends after the grace period", cur() ~= "fishing")
+G.instance = "pvp"; fire("PLAYER_ENTERING_WORLD", false, false)
+check("battleground condition", cur() == "pvp")
+G.instance = "none"; fire("PLAYER_ENTERING_WORLD", false, false); advance(5)
+fire("PLAYER_LEVEL_UP", 20)
+check("level up jingle has top priority", cur() == "levelup")
+advance(11)
+check("after the jingle the normal music comes back", cur() ~= "levelup")
+
+-- zone music (by map ID, with parent maps)
+ns.CreatePlaylist("Durotar"); ns.SetInPlaylist("Durotar", "music\\b.ogg", true)
+G.map = 1411; fire("ZONE_CHANGED_NEW_AREA")
+ns.Assign("zone", "Durotar"); advance(5)
+check("zone music in Durotar", cur() == "zone" and ns.Player.playlist == "Durotar" and ns.db.zones[1411].name == "Durotar")
+G.map = 1454; fire("ZONE_CHANGED_NEW_AREA"); advance(5)
+check("Orgrimmar (child map of Durotar) has its own zone level", ns.CurrentZone().id == 1454)
+check("unassigned zone falls back", cur() ~= "zone")
+G.map = 1411; fire("ZONE_CHANGED_NEW_AREA"); advance(5)
+
+-- profiles
+ns.NewCharacterProfile()
+local idleBefore = ns.db.profiles.Default.assign.idle
+check("new character profile copies the settings", ns.profileName == "Tester-Realm" and idleBefore ~= nil
+  and ns.db.assign.idle == idleBefore and ns.db.charProfiles["Tester-Realm"] == "Tester-Realm")
+ns.Assign("idle", nil)
+check("profiles are independent", ns.db.profiles.Default.assign.idle == idleBefore and ns.db.assign.idle == nil)
+ns.SetCharacterProfile(ns.DEFAULT_PROFILE)
+check("back to Default", ns.db.assign.idle == idleBefore and ns.db.charProfiles["Tester-Realm"] == nil)
+ns.DeleteProfile("Tester-Realm")
+check("profile deleted", ns.db.profiles["Tester-Realm"] == nil)
+
+-- sharing
+local txt = ns.ExportPlaylist("Horde")
+check("export text", type(txt) == "string" and txt:sub(1, 7) == "!KZZR1!")
+local name, found, total = ns.ImportPlaylist(txt)
+check("import creates a copy", name == "Horde (2)" and found == total and total >= 1)
+check("base64 round trip", ns.Base64Decode(ns.Base64Encode("Orda ナニダト ab")) == "Orda ナニダト ab")
+check("invalid text rejected", ns.ImportPlaylist("hello") == nil)
+ns.ShowShareDialog("export", txt); ns.ShowShareDialog("import", "", function() end)
+
+-- crossfade: volume ramps down, playlist switches, volume comes back
+ns.db.crossfade = true
+ns.Assign("combat", "Special"); advance(5)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(0.3)
+check("crossfade: volume going down", tonumber(musicVolume) < 0.8 and ns.db.userVolume == 0.8)
+advance(2)
+check("crossfade: switched and volume restored", cur() == "combat" and math.abs(tonumber(musicVolume) - 0.8) < 0.001
+  and ns.db.userVolume == 0.8)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+ns.db.crossfade = false
+
+-- banner
+ns.db.ui.banner = true
+ns.PlayFrom(ns.GAME, ns.trackById["game:8158670"])
+check("now playing banner shown", ns.Banner:IsShown())
+ns.SetMode("auto"); advance(5)
+
+-- performance accounting
+local report = ns.PerfReport()
+check("perf report", report[1]:find("321 KB", 1, true) ~= nil and #report > 1)
+SlashCmdList.KZZRADIO("perf")
+check("/kzz perf saves the report", type(ns.db.lastPerf) == "table")
+check("UNIT_AURA in combat costs no evaluation", (function()
+  G.combat = true; fire("PLAYER_REGEN_DISABLED")
+  local before = ns.perf.Evaluate.calls
+  for _ = 1, 50 do fire("UNIT_AURA", "player") end
+  local after = ns.perf.Evaluate.calls
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+  return after == before
+end)())
+
+-- death: the client overrides our music, so the current track is started again
+ns.PlayFrom(ns.GAME, ns.trackById["game:53198"]); advance(5)
+playing = "zone music of the game"  -- what the client does on death
+G.dead = true; fire("PLAYER_DEAD"); advance(2)
+check("after death our track plays again (free play)", playing == 53198 and ns.db.mode == ns.GAME)
+playing = "ghost music of the game"
+fire("PLAYER_ALIVE"); advance(2)
+check("after releasing the spirit it plays again", playing == 53198)
+G.dead = false; playing = "game music"; fire("PLAYER_UNGHOST"); advance(2)
+check("after resurrection it plays again", playing == 53198)
+ns.SetMode("auto"); advance(5)
+
+-- podcast: episode navigation buttons, and next/prev still move by one part
+ns.CreatePlaylist("Shows"); ns.SetInPlaylist("Shows", "ep:k1", true); ns.SetInPlaylist("Shows", "music\\a.ogg", true)
+ns.db.shuffle = false
+ns.SetEpisodePart(ns.trackById["ep:k1"], 2)
+ns.PlayFrom("Shows", ns.trackById["ep:k1"])
+check("podcast resumes at part 2", is("part_001"))
+ns.UI:Refresh()
+check("episode buttons shown on a podcast", KalimdorZugZugRadioFrame.epNext:IsShown())
+ns.Player:Next()
+check("next on a podcast = next part", is("part_002"))
+ns.Player:SkipTrack(1)
+check("next episode skips the remaining parts", ns.Player.track == ns.trackById["music\\a.ogg"]
+  and ns.db.podcastProgress["ep:k1"].part == 3 and not ns.db.podcastProgress["ep:k1"].done)
+ns.UI:Refresh()
+check("episode buttons hidden on a song", not KalimdorZugZugRadioFrame.epNext:IsShown())
+ns.Player:SkipTrack(-1)
+check("previous episode resumes where it was", ns.Player.track == ns.trackById["ep:k1"] and is("part_002"))
+ns.SetMode("auto"); ns.DeletePlaylist("Shows"); advance(5)
+
+-- volume
+ns.Player:SetVolume(0.35)
+check("volume slider sets the Music volume", math.abs(tonumber(musicVolume) - 0.35) < 0.001)
+ns.Player:SetVolume(2)
+check("volume is clamped to 100%", tonumber(musicVolume) == 1)
+ns.db.crossfade = true
+ns.Assign("combat", "Special"); ns.Player:SetVolume(0.6); advance(5)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(0.3)
+ns.Player:SetVolume(0.2) -- user moves the slider during the fade
+advance(2)
+check("volume changed during a fade becomes its target", math.abs(tonumber(musicVolume) - 0.2) < 0.001)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+ns.db.crossfade = false; ns.Player:SetVolume(0.8)
+
+-- v0.6: favourites, exclusions, history, stats
+ns.SetMode("auto"); advance(5)
+local A, B, C = ns.trackById["music\\a.ogg"], ns.trackById["music\\b.ogg"], ns.trackById["music\\c.mp3"]
+ns.ToggleFavorite(B)
+check("favourite -> Favourites playlist", ns.IsFavorite(B) and ns.IsPlayable(ns.FAV) and ns.GetPlaylist(ns.FAV).tracks[1] == B)
+ns.ToggleFavorite(B)
+check("unfavourite", not ns.IsFavorite(B))
+ns.CreatePlaylist("ABC"); ns.SetManyInPlaylist("ABC", { A.file, B.file, C.file }, true)
+ns.SetExcluded(B, true)
+ns.PlayFrom("ABC", A); advance(11)
+check("excluded track is skipped automatically", ns.Player.track == C)
+ns.PlayFrom("ABC", B)
+check("an excluded track still plays when chosen explicitly", ns.Player.track == B)
+ns.SetExcluded(B, false)
+check("history: most recent first", ns.db.history[1] == B.file and ns.IsPlayable(ns.HISTORY))
+check("stats: plays counted", (ns.db.stats[A.file].plays or 0) >= 1 and ns.IsPlayable(ns.TOP))
+advance(3); ns.Player:Stop(true)
+check("stats: listening time counted", (ns.db.totalSeconds or 0) > 0)
+SlashCmdList.KZZRADIO("stats")
+ns.DeletePlaylist("ABC"); ns.SetMode("auto"); advance(5)
+
+-- AFK pause / resume
+ns.Player:Toggle(true); advance(1)
+G.afk = true; fire("PLAYER_FLAGS_CHANGED", "player"); advance(2)
+check("AFK pauses the music", not ns.Player.playing and ns.Player.afkPaused)
+advance(5)
+check("conditions don't restart it while AFK", not ns.Player.playing)
+G.afk = false; fire("PLAYER_FLAGS_CHANGED", "player"); advance(1)
+check("back from AFK: music resumes", ns.Player.playing and not ns.Player.afkPaused)
+
+-- cinematics: the music is lowered, then restored
+ns.Player:SetVolume(0.8)
+fire("CINEMATIC_START"); advance(1)
+check("cinematic lowers the music", math.abs(tonumber(musicVolume) - 0.2) < 0.01)
+fire("CINEMATIC_STOP"); advance(1)
+check("after the cinematic the volume is back", math.abs(tonumber(musicVolume) - 0.8) < 0.01)
+
+-- per-condition volume
+local condKey = ns.Rules.current
+ns.SetConditionVolume(condKey, 0.5); ns.Rules:Reset(); ns.Rules:Evaluate(true); advance(1)
+check("condition volume multiplies the user volume", ns.Rules.current == condKey and math.abs(tonumber(musicVolume) - 0.4) < 0.01
+  and ns.Player:GetVolume() == 0.8)
+ns.SetMode(ns.ALL)
+check("free play uses the user's own volume", math.abs(tonumber(musicVolume) - 0.8) < 0.01)
+ns.SetMode("auto"); ns.SetConditionVolume(condKey, 1); advance(5)
+
+-- volume changed in the game options is adopted
+musicVolume = "0.3"; ns.Player:GetVolume()
+check("external volume change becomes the user volume", math.abs(ns.Player:GetVolume() - 0.3) < 0.01)
+ns.Player:SetVolume(0.8)
+
+-- boss-specific music
+ns.CreatePlaylist("Rag"); ns.SetInPlaylist("Rag", "music\\a.ogg", true)
+G.combat = true; fire("ENCOUNTER_START", 672, "Ragnaros", 1, 40); fire("PLAYER_REGEN_DISABLED")
+check("boss seen is remembered", ns.db.seenBosses[672] == "Ragnaros")
+ns.AssignBoss(672, "Rag"); advance(1)
+check("boss-specific playlist", ns.Rules.current == "boss" and ns.Player.playlist == "Rag")
+fire("ENCOUNTER_END", 672); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+G.combat = true; fire("ENCOUNTER_START", 999, "Other boss", 1, 5); fire("PLAYER_REGEN_DISABLED"); advance(1)
+check("other bosses use the generic boss playlist", ns.Player.playlist ~= "Rag")
+fire("ENCOUNTER_END", 999); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+
+-- key bindings
+check("binding names defined", BINDING_HEADER_KZZR == "Kalimdor ZugZug Radio" and BINDING_NAME_KZZR_PLAY ~= nil)
+local v0 = ns.Player:GetVolume(); KZZR_Binding("voldown")
+check("binding: volume down", math.abs(ns.Player:GetVolume() - (v0 - 0.1)) < 0.01)
+KZZR_Binding("volup"); KZZR_Binding("favorite"); KZZR_Binding("favorite")
+
+-- compact player
+ns.UI:Toggle(true)
+ns.UI:SetCompact(true)
+check("compact player shown, full player hidden", KalimdorZugZugRadioCompact:IsShown() and not KalimdorZugZugRadioFrame:IsShown())
+ns.UI:SetCompact(false)
+check("back to the full player", KalimdorZugZugRadioFrame:IsShown() and not KalimdorZugZugRadioCompact:IsShown())
+
+-- translations: every language has all the English keys with the same placeholders
 local function placeholders(str) local n = 0; for _ in str:gmatch("%%[sd]") do n = n + 1 end; return n end
 for _, code in ipairs(ns.LANG_ORDER) do
   local missing, bad = {}, {}
@@ -227,32 +540,32 @@ for _, code in ipairs(ns.LANG_ORDER) do
     if v == nil then missing[#missing + 1] = key
     elseif placeholders(v) ~= placeholders(en) then bad[#bad + 1] = key end
   end
-  check(code .. " completa" .. (#missing > 0 and (" (mancano: " .. table.concat(missing, ",") .. ")") or "")
-    .. (#bad > 0 and (" (segnaposto: " .. table.concat(bad, ",") .. ")") or ""), #missing == 0 and #bad == 0)
+  check(code .. " complete" .. (#missing > 0 and (" (missing: " .. table.concat(missing, ",") .. ")") or "")
+    .. (#bad > 0 and (" (placeholders: " .. table.concat(bad, ",") .. ")") or ""), #missing == 0 and #bad == 0)
 end
 clientLocale = "deDE"; ns.InitLanguage(nil)
-check("lingua dal client (deDE)", ns.lang == "deDE" and ns.L.SIT_combat == "Kampf" and not ns.useAddonFont)
+check("language from the client (deDE)", ns.lang == "deDE" and ns.L.SIT_combat == "Kampf" and not ns.useAddonFont)
 clientLocale = "enGB"; ns.InitLanguage(nil)
 check("enGB -> enUS", ns.lang == "enUS")
 clientLocale = "enUS"; ns.InitLanguage("jaJP")
-check("giapponese su client enUS: font addon, chat in inglese", ns.useAddonFont and ns.chatLang == "enUS" and ns.L.SIT_boss == "ボス" and ns.CL.SIT_boss == "Boss")
-check("font addon creato", ns.Font("GameFontNormalSmall") == "KZZR_GameFontNormalSmall")
+check("Japanese on an enUS client: addon font, chat in English", ns.useAddonFont and ns.chatLang == "enUS" and ns.L.SIT_boss == "ボス" and ns.CL.SIT_boss == "Boss")
+check("addon font created", ns.Font("GameFontNormalSmall") == "KZZR_GameFontNormalSmall")
 clientLocale = "zhCN"; ns.InitLanguage(nil)
-check("zhCN su client zhCN: font del gioco", ns.lang == "zhCN" and not ns.useAddonFont and ns.chatLang == "zhCN")
+check("zhCN on a zhCN client: game font", ns.lang == "zhCN" and not ns.useAddonFont and ns.chatLang == "zhCN")
 clientLocale = "koKR"; ns.InitLanguage(nil)
-check("koKR (non tradotto) -> inglese", ns.lang == "enUS")
+check("koKR (not translated) -> English", ns.lang == "enUS")
 ns.InitLanguage("esMX")
-check("esMX eredita da esES", ns.L.SIT_campfire == "Fogata" and ns.L.SIT_combat == "Combate")
+check("esMX inherits from esES", ns.L.SIT_campfire == "Fogata" and ns.L.SIT_combat == "Combate")
 clientLocale = "enUS"; ns.InitLanguage(nil)
 SlashCmdList.KZZRADIO("lang ja"); check("/kzz lang ja", ns.db.lang == "jaJP")
 SlashCmdList.KZZRADIO("lang auto"); check("/kzz lang auto", ns.db.lang == nil)
 SlashCmdList.KZZRADIO("help")
 SlashCmdList.KZZRADIO("debug")
 clientLocale = "enUS"; ns.InitLanguage(nil)
-check("testo giapponese su client enUS -> font addon", ns.HasCJK("夜に駆ける") and not ns.HasCJK("Ado - Café"))
-check("font CJK forzato anche con UI inglese", ns.Font("GameFontHighlightSmall", ns.HasCJK("ナニダト")) == "KZZR_GameFontHighlightSmall")
+check("Japanese text on an enUS client -> addon font", ns.HasCJK("夜に駆ける") and not ns.HasCJK("Ado - Café"))
+check("CJK font forced even with an English UI", ns.Font("GameFontHighlightSmall", ns.HasCJK("ナニダト")) == "KZZR_GameFontHighlightSmall")
 clientLocale = "zhCN"; ns.InitLanguage(nil)
-check("su client cinese usa i font del gioco", not ns.HasCJK("夜に駆ける"))
+check("on a Chinese client the game fonts are used", not ns.HasCJK("夜に駆ける"))
 clientLocale = "enUS"; ns.InitLanguage(nil)
-check("nessun errore all'avvio", #ns.startupErrors == 0)
-print(fails == 0 and "TUTTI I TEST OK" or (fails .. " TEST FALLITI"))
+check("no startup errors", #ns.startupErrors == 0)
+print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

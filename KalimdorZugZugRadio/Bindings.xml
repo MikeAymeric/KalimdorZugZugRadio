@@ -1,0 +1,12 @@
+<Bindings>
+  <!-- Key Bindings > AddOns > Kalimdor ZugZug Radio. Names: BINDING_NAME_* (Core.lua, localized). -->
+  <Binding name="KZZR_PLAY" header="KZZR" category="ADDONS">KZZR_Binding("play")</Binding>
+  <Binding name="KZZR_NEXT" category="ADDONS">KZZR_Binding("next")</Binding>
+  <Binding name="KZZR_PREV" category="ADDONS">KZZR_Binding("prev")</Binding>
+  <Binding name="KZZR_SKIP" category="ADDONS">KZZR_Binding("skip")</Binding>
+  <Binding name="KZZR_VOLUP" category="ADDONS">KZZR_Binding("volup")</Binding>
+  <Binding name="KZZR_VOLDOWN" category="ADDONS">KZZR_Binding("voldown")</Binding>
+  <Binding name="KZZR_PLAYER" category="ADDONS">KZZR_Binding("player")</Binding>
+  <Binding name="KZZR_LIBRARY" category="ADDONS">KZZR_Binding("library")</Binding>
+  <Binding name="KZZR_FAVORITE" category="ADDONS">KZZR_Binding("favorite")</Binding>
+</Bindings>

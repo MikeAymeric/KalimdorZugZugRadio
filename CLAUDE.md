@@ -7,17 +7,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Kalimdor ZugZug Radio** (`KalimdorZugZugRadio/`) is a World of Warcraft addon for **WoW Forever**. Music lives in the addon's `music/` folder; its subfolders are only for organisation. The user builds playlists **in-game** and assigns one playlist per condition (boss, elite/rare, combat, flight, campfire, dungeon, town, and "idle" = no condition). They can also free-play a playlist and ignore the conditions. There are three UIs:
 - a now-playing window: cover, title, remaining time, prev/play/next/shuffle, mode/playlist dropdown;
 - a library window: playlist CRUD, track picker with search;
-- a settings panel in Options > AddOns: general options, language, which conditions are enabled, and the playlist for each. The user communicates in Italian, and the user docs (`README.md`) and import-script output are in Italian. In-game strings are localized (see `Locales.lua`). Spotify was explicitly dropped because the addon sandbox has no network/IPC.
+- a settings panel in Options > AddOns: general options, language, which conditions are enabled, and the playlist for each. The user communicates in Italian (reply in Italian), but **everything in the repository is English**: code comments, docs, script output, test labels. The project is meant to be published internationally. In-game strings are localized (see `Locales.lua`). Spotify was explicitly dropped because the addon sandbox has no network/IPC.
 
 `RadioProbe/` is a throwaway API compatibility probe whose results are summarised below. Keep it only for re-testing after client patches.
 
 ## Commands
 
 - Import music / regenerate the library: `python tools/import_music.py [--addon DIR] [--keep-originals] [--keep-names]`. It uses only the stdlib plus ffmpeg/ffprobe.
-  - It finds the addon dir by walking up from the cwd, then from the script location, looking for `KalimdorZugZugRadio.toc`. The user's real install is a **copy** in the game's AddOns folder (not a junction), and their music lives there.
-  - Originals: after a conversion succeeds (the OGG is probed and has a duration) the source is **deleted**, and an existing `music/_originali/` is removed. `--keep-originals` moves the sources there instead.
+  - It finds the addon dir in this order, looking for `KalimdorZugZugRadio.toc`:
+    1. `--addon`;
+    2. the cwd and its parents;
+    3. the addon installed in WoW on this PC, via `wow_roots()`: the Windows registry `InstallPath` of Blizzard, then the usual folders on every drive, with flavors ordered `_forever_` first;
+    4. the script's own location (the repo copy, for development).
+
+    The user's real install is a **copy** in the game's AddOns folder (not a junction), and their music lives there. Never put personal paths in the repo.
+  - Originals: after a conversion succeeds (the OGG is probed and has a duration) the source is **deleted**, and an existing `music/_originals/` is removed. `--keep-originals` moves the sources there instead.
   - Covers are deduplicated by content: each one is rendered to raw 256×256 RGB, named `covers/<sha1 of pixels>.png`, and shared by every track with identical art. `covers/_index.json` maps track path (or `folder:<dir>`) → cover + source mtime, so covers survive the source deletion and aren't re-extracted. Unreferenced PNGs are deleted at the end. Legacy per-track `sha1(path)[:12].png` covers are migrated.
-  - By default it renames non-ASCII files and folders to ASCII plus a short sha1 tag before converting, because WoW may not open non-ASCII paths. The original names go to `music/_nomi_originali.json` and are used for the displayed folder name and the title fallback.
+  - By default it renames non-ASCII files and folders to ASCII plus a short sha1 tag before converting, because WoW may not open non-ASCII paths. The original names go to `music/_original_names.json` and are used for the displayed folder name and the title fallback. Versions ≤ 0.4 used Italian names (`_nomi_originali.json`, `_originali/`); the script migrates them automatically.
+- Game music catalog (dev-only; the output is committed): `python tools/build_game_music.py [--listfile community-listfile.csv] [--limit N]`. It works as follows:
+  - selects tracks from the wowdev community listfile: `sound/music/forever/*`, `citymusic`, `musical moments`, and the classic `zonemusic` dirs in `CLASSIC_ZONES`;
+  - measures durations by downloading each file once from `wago.tools/api/casc/<fid>?download` (cached in `tools/game_music_durations.json`, committed, so reruns only fetch new IDs);
+  - picks a cover icon via `ICON_RULES` (keyword → icon names, only icons present in the listfile, stored as FileDataID);
+  - writes `KalimdorZugZugRadio/GameMusic.lua` (`KZZR_GameMusic = { {fid, title, folder, duration, icon} }`).
 - Tests (from `tests/`, after `npm install` once):
   - `npm test` runs `harness.lua` in the fengari Lua VM against stubbed WoW APIs. It loads the addon files, simulates events/auras/timers (`fire(...)`, `advance(sec)`, the `G` game-state table) and prints PASS/FAIL scenarios. To add a scenario, append `check(label, cond)` steps at the end of `harness.lua`. When you add a new addon file or WoW API call, also add it to the load list in `run.js`/`harness.lua` and to the stubs.
   - `npm run lint` does a Lua 5.1 syntax check of every addon `.lua` file. There is no local Lua interpreter.
@@ -27,9 +38,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Load order (`.toc`): `Library.lua` → `Locales.lua` → `Core.lua` → `Player.lua` → `Rules.lua` → `UI.lua` → `LibraryUI.lua` → `Settings.lua` → `Minimap.lua`. `Settings.lua` is the settings panel, registered with `Settings.RegisterCanvasLayoutCategory` under Options > AddOns, with a standalone-window fallback if that API is missing. It holds the general toggles, the language dropdown (+ `ReloadUI`), and per-condition enable checkboxes (`db.disabled[key]`, checked in `ns.PlaylistFor`) with playlist dropdowns. `Settings.OpenToCategory` is refused in combat. `Minimap.lua` contains the hand-rolled minimap button (angle saved in `db.minimap`, no LibDBIcon) and the global `KZZR_OnCompartment*` handlers referenced by the `.toc` Addon Compartment fields. They share the addon namespace (`local _, ns = ...`).
+Game music (OST): `GameMusic.lua` tracks are merged by `ns.LoadLibrary` into `ns.gameTracks`.
+- Their id is `"game:<fid>"`, so user playlists can mix them with their own files.
+- `ns.GAME` (`"__game"`) is a virtual playlist next to `ns.ALL`. `ns.ALL` = the user's own files only.
+- `Player` plays `PlayMusic(track.fid)` for these.
+- `ns.CoverOf(t)` returns the icon FileDataID or the addon PNG path.
+- `ns.everyTrack` = user tracks + game tracks, used by the library's "source" filter.
 
-- **`Library.lua`** is GENERATED by `tools/import_music.py`; never hand-edit it. It defines a flat global `KZZR_Library.tracks = { {file, folder, title, artist, album, duration, cover} }` with paths relative to the addon root. **`file` is the track id**: user playlists in SavedVariables reference tracks by it. Moving or renaming a file silently drops it from playlists, and tracks missing from the library are skipped. Lua cannot list directories or read file contents/tags/duration, so all metadata comes from the script: tags via ffprobe; non-OGG/MP3 files converted to OGG with libvorbis q5 and originals moved to `music/_originali/`; covers (an embedded `attached_pic` or `cover.jpg`/`folder.jpg`) rendered to 256×256 PNG in `covers/`.
+Podcasts:
+- **Download.** `import_music.py` reads `<addon>/podcasts.txt` (or `podcast.txt`; gitignored) on every run when it exists; `--podcasts` creates it from a template, `--no-podcasts` skips the download. Each line is an RSS feed URL or an Apple Podcasts link, resolved via the iTunes lookup API, plus an optional number of episodes to keep.
+- **Storage.** It downloads the newest N episodes and splits each into `PART_SECONDS` (150 s) OGG parts with the ffmpeg segment muxer, in `music/Podcast/<show>/<date> <key>/part_NNN.ogg`. `episode.json` is written last, as the completeness marker. Older episodes are pruned.
+- **Library format.** In `Library.lua` each part is a row carrying `episode`/`part`/`parts`. `ns.LoadLibrary` groups the rows into one track: `t.parts`, id `"ep:<key>"`, total duration. `ns.PODCAST` (`"__podcast"`) is a virtual playlist, newest first.
+- **Playback.** The Player plays `parts[ns.EpisodePart(t)]`, with resume state in `db.podcastProgress["ep:<key>"] = {part, done}`. `Next`/`Prev` move by one part, and `P.offset` makes `Elapsed()` count from the start of the episode.
+
+v0.5 additions:
+- **Conditions.** There are 16, in `ns.SITUATIONS` priority order. `levelup` is a one-track jingle: its end is scheduled on the `TRACK_CHANGED` of the jingle, with a 30s fallback. `fishing` uses channel events plus a 20s grace between casts. `mounted` = ground mount (not taxi, not `IsFlying`). `night` uses `GetGameTime`. `zone` = playlist per zone-level mapID: `ns.CurrentZone()`; micro maps inherit it, but city zones like Orgrimmar don't.
+- **Profiles.** `db.profiles[name] = {assign, disabled, zones}` and `db.charProfiles["Name-Realm"]`. `ns.db.assign/disabled/zones` are aliases of the active profile's tables; they are nil'ed on `PLAYER_LOGOUT` so they aren't saved twice. The pre-0.5 `db.assign` is migrated into `Default`.
+- **Crossfade.** `Player:SwitchTo` ramps the `Sound_MusicVolume` CVar. The original value is kept in `db.fadeVolume` and restored on load/logout if a fade was interrupted. Tests disable it globally and cover it in a dedicated scenario.
+- **Banner.lua.** A "Now playing" toast anchored above `ChatFrame1`.
+- **Share.** `ns.ExportPlaylist`/`ImportPlaylist` = `"!KZZR1!" .. base64(name\nids...)`. `ns.ShowShareDialog`.
+- **Skins.** `ns.SkinWindow(frame, title, close)` gives any BackdropTemplate frame the classic or modern look. Player: `UI:ApplySkin`, setting `db.ui.skin`. Settings content lives in a `UIPanelScrollFrameTemplate`, with conditions in 2 columns.
+- **Performance.**
+  - Event handlers only update state; `Rules` coalesces evaluations into one `C_Timer.After(0)`.
+  - `UNIT_AURA` is ignored in combat. `ActiveSet` reuses one table. The map chain and the zone are cached, invalidated on zone events.
+  - Menus are rebuilt only on `PLAYLISTS_CHANGED`/`MODE_CHANGED`/`SETTINGS_CHANGED`.
+  - `ns.Profiled(name, fn)` records CPU time (`debugprofilestop`); `/kzz perf` prints it and stores it in `db.lastPerf`, which is also saved on logout.
+
+v0.6 additions:
+- **Volume controller** (Player.lua). `db.userVolume` is the only source of truth. The CVar is written as `user × V.cond (per-condition, profile.volumes) × V.duck (cinematics/talking heads) × V.fade (crossfade)`, animated by `tween(field)`. An external CVar change (game options) is detected against the last written value and adopted. The user volume is written back on logout; `InitVolume` recovers on load. Don't call SetCVar for the music volume anywhere else.
+- **Held state.** `P:IsHeld()` = `userStopped` or `afkPaused` (PLAYER_FLAGS_CHANGED + UnitIsAFK). Rules and SetPlaylist don't restart music while held.
+- **Exclusions.** `startTrack` skips `db.excluded` tracks unless `P.explicitNext` (set by `PlayTrack`). `ns.RecordPlay` feeds `db.history` (50, newest first), `db.stats[id] = {plays, seconds}` and `db.totalSeconds`.
+- **Dynamic playlists.** `ns.FAV/HISTORY/TOP` are virtual playlists. Their cache is refreshed by `ns.InvalidateDynamic()` (menus, library refresh), but never while one of them is the playing queue.
+- **Boss music.** `Rules.encounterID` comes from `ENCOUNTER_START`; `db.seenBosses[id] = name`; `profile.bosses[id] = {playlist}` wins in `ns.PlaylistFor("boss")`. Condition dropdowns have Volume and (boss) Specific-bosses submenus, using the Menu API's nested `CreateButton`.
+- **Key bindings.** `Bindings.xml` (auto-loaded, header `KZZR`) calls the global `KZZR_Binding(action)`. `BINDING_NAME_*` are set in `ns.SetupBindings()` after the language is known.
+- **Compact player.** `KalimdorZugZugRadioCompact` (UI.lua) shows when `db.ui.compact`; `UI:UpdateVisibility` handles both frames.
+
+Manual precedence: a user choice: a playlist from the dropdown, `PlayFrom`, or `Next`/`Prev` while in auto mode (`takeManualControl` in Player.lua): switches to free play (`db.mode = playlist`). Conditions are then ignored until the user picks "Automatic". The end-of-track timer calls `Next(true)`, which doesn't count as manual.
+
+Load order (`.toc`): `Library.lua` → `GameMusic.lua` → `Locales.lua` → `Core.lua` → `Player.lua` → `Rules.lua` → `UI.lua` → `LibraryUI.lua` → `Settings.lua` → `Minimap.lua`. `Settings.lua` is the settings panel, registered with `Settings.RegisterCanvasLayoutCategory` under Options > AddOns, with a standalone-window fallback if that API is missing. It holds the general toggles, the language dropdown (+ `ReloadUI`), and per-condition enable checkboxes (`db.disabled[key]`, checked in `ns.PlaylistFor`) with playlist dropdowns. `Settings.OpenToCategory` is refused in combat. `Minimap.lua` contains the hand-rolled minimap button (angle saved in `db.minimap`, no LibDBIcon) and the global `KZZR_OnCompartment*` handlers referenced by the `.toc` Addon Compartment fields. They share the addon namespace (`local _, ns = ...`).
+
+- **`Library.lua`** is GENERATED by `tools/import_music.py`; never hand-edit it. It defines a flat global `KZZR_Library.tracks = { {file, folder, title, artist, album, duration, cover} }` with paths relative to the addon root. **`file` is the track id**: user playlists in SavedVariables reference tracks by it. Moving or renaming a file silently drops it from playlists, and tracks missing from the library are skipped. Lua cannot list directories or read file contents/tags/duration, so all metadata comes from the script: tags via ffprobe; non-OGG/MP3 files converted to OGG with libvorbis q5 and the originals deleted (or moved to `music/_originals/`); covers (an embedded `attached_pic` or `cover.jpg`/`folder.jpg`) rendered to 256×256 PNG in `covers/`.
 - **`Locales.lua`** holds every user-visible string in 11 languages: enUS (the fallback and reference key set), frFR, deDE, esES, esMX (inherits from esES via a metatable), ptBR, itIT, ruRU, zhCN, zhTW and jaJP.
   - Never hardcode UI text. Add the key to `LOCALES.enUS` **and every other locale**: the test harness fails on missing keys or mismatched `%s`/`%d` counts.
   - `ns.L` is for UI text and `ns.CL` is for chat. `ns.Print(key, ...)` takes a translation key, not a literal.
@@ -77,7 +125,7 @@ v0.4.0 (git tag) was confirmed working in-game by the user on 2026-11-10: player
 - **The minimap button needs** a frame level above `Minimap:GetFrameLevel()`, or it renders underneath.
 - **`Settings.OpenToCategory` may silently not show the panel.** `ns.Settings:Open()` tries several methods, falls back to a standalone window, and records the attempts in `KZZR_DB.lastSettingsOpen`.
 - **For diagnosis**, `KZZR_DB.startupErrors` and `KZZR_DB.lastDebug` are written to `WTF\Account\<acct>\SavedVariables\KalimdorZugZugRadio.lua` on `/reload`, so read that file instead of asking the user to copy chat.
-- **Deploying:** the user's game install is a copy, so after code changes, copy the changed `.lua`/`.toc` files to `<WoW>\_forever_\Interface\AddOns\KalimdorZugZugRadio\`. Never copy over `music\`, `covers\` or `Library.lua` there.
+- **Deploying:** the user's game install is a copy, so after code changes, copy the changed `.lua`/`.toc`/`.xml` files to the game's AddOns copy (the path is in Claude's local memory, not in the repo). Never copy over `music\`, `covers\` or `Library.lua` there.
 
 Still unverified: whether non-ASCII file paths play (the import script avoids them by renaming).
 

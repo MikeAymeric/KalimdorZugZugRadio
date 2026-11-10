@@ -1,12 +1,16 @@
-# Musica e copertine dell'utente: generate/personali, spesso protette da copyright
+# The user's own music and covers: generated/personal, often copyrighted
 KalimdorZugZugRadio/music/*
 !KalimdorZugZugRadio/music/.gitkeep
 KalimdorZugZugRadio/covers/
 
-# Dipendenze dei test
+# Personal podcast list
+KalimdorZugZugRadio/podcasts.txt
+KalimdorZugZugRadio/podcast.txt
+
+# Test dependencies
 tests/node_modules/
 
-# Python / sistema
+# Python / OS
 __pycache__/
 *.pyc
 Thumbs.db

@@ -1,21 +1,21 @@
--- LibraryUI: finestra per creare playlist e scegliere i brani (condizioni e lingua sono in Settings.lua).
+-- LibraryUI: window to create playlists and pick tracks (conditions and language live in Settings.lua).
 local _, ns = ...
 local L = ns.L
 
-local LUI = { selected = nil } -- selected = nome playlist selezionata (ns.ALL = tutta la libreria)
+local LUI = { selected = nil } -- selected = selected playlist name (ns.ALL = whole library)
 ns.LibraryUI = LUI
 
 local ACCENT = { 1, 0.5, 0.1 }
 local f
 
 ---------------------------------------------------------------------------
--- Widget di base
+-- Basic widgets
 ---------------------------------------------------------------------------
 local function button(parent, text, width, onClick, tooltip)
   return ns.MakeButton(parent, text, width, onClick, tooltip)
 end
 
--- Allarga il pulsante quanto basta per il testo tradotto.
+-- Widens the button enough for the translated text.
 local function fitButton(b, minWidth)
   local fs = b:GetFontString()
   local w = fs and fs:GetStringWidth()
@@ -54,7 +54,7 @@ local function header(parent, label, x, y)
   return h
 end
 
--- Lista virtuale: numRows righe riciclate + barra di scorrimento + rotella.
+-- Virtual list: numRows recycled rows + scroll bar + mouse wheel.
 local function createList(parent, numRows, rowHeight, width, initRow, updateRow)
   local list = CreateFrame("Frame", nil, parent)
   list:SetSize(width, numRows * rowHeight)
@@ -92,7 +92,7 @@ local function createList(parent, numRows, rowHeight, width, initRow, updateRow)
   thumb:SetSize(10, 30)
   thumb:SetVertexColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.7)
   bar:SetValueStep(1)
-  if bar.SetObeyStepDrag then bar:SetObeyStepDrag(true) end -- non esiste sul client Forever
+  if bar.SetObeyStepDrag then bar:SetObeyStepDrag(true) end -- missing on the Forever client
   bar:SetMinMaxValues(0, 0)
   bar:SetScript("OnValueChanged", function(_, value)
     list.offset = math.floor(value + 0.5)
@@ -133,7 +133,7 @@ local function createList(parent, numRows, rowHeight, width, initRow, updateRow)
 end
 
 ---------------------------------------------------------------------------
--- Colonna 1: playlist
+-- Column 1: playlists
 ---------------------------------------------------------------------------
 local function selectedIsUser()
   return LUI.selected and LUI.selected ~= ns.ALL and ns.db.playlists[LUI.selected] ~= nil
@@ -152,7 +152,7 @@ local function buildPlaylistColumn()
     row.count:SetPoint("RIGHT", -4, 0)
     row:SetScript("OnClick", function(self)
       LUI.selected = self.item
-      f.nameBox:SetText(self.item ~= ns.ALL and self.item or "")
+      f.nameBox:SetText(ns.db.playlists[self.item] and self.item or "")
       LUI:Refresh()
     end)
     row:SetScript("OnDoubleClick", function(self) ns.SetMode(self.item) end)
@@ -214,17 +214,62 @@ local function buildPlaylistColumn()
 
   f.autoBtn = button(f, L.BACK_AUTO, 210, function() ns.SetMode("auto") end, L.TT_BACK_AUTO)
   f.autoBtn:SetPoint("TOPLEFT", f.playSel, "BOTTOMLEFT", 0, -4)
+
+  -- share playlists as text
+  f.export = button(f, L.EXPORT, 103, function()
+    if not selectedIsUser() then return end
+    ns.ShowShareDialog("export", ns.ExportPlaylist(LUI.selected))
+  end, L.TT_EXPORT)
+  f.export:SetPoint("TOPLEFT", f.autoBtn, "BOTTOMLEFT", 0, -4)
+  f.import = button(f, L.IMPORT, 103, function()
+    ns.ShowShareDialog("import", "", function(textValue)
+      local name, found, total = ns.ImportPlaylist(textValue)
+      if not name then ns.Print(found or "MSG_IMPORT_BAD") return end
+      ns.Print("MSG_IMPORTED", name, found, total)
+      LUI.selected = name
+      _G.KalimdorZugZugShareDialog:Hide()
+      LUI:Refresh()
+    end)
+  end, L.TT_IMPORT)
+  f.import:SetPoint("LEFT", f.export, "RIGHT", 4, 0)
 end
 
 ---------------------------------------------------------------------------
--- Colonna 2: brani
+-- Column 2: tracks
 ---------------------------------------------------------------------------
+LUI.source = "all" -- with a user playlist selected: "all" | "mine" | "podcast" | "game"
+
+-- Tracks to work on: those of the selected virtual playlist or, for a user playlist,
+-- the user's tracks and/or the game music, according to the "source" filter.
+local function baseTracks()
+  if LUI.selected == ns.GAME then return ns.gameTracks end
+  if LUI.selected == ns.PODCAST then return ns.episodes end
+  if LUI.selected == ns.FAV or LUI.selected == ns.HISTORY or LUI.selected == ns.TOP then
+    return ns.GetPlaylist(LUI.selected).tracks
+  end
+  if not selectedIsUser() then return ns.tracks end
+  if LUI.source == "mine" then return ns.tracks end
+  if LUI.source == "game" then return ns.gameTracks end
+  if LUI.source == "podcast" then return ns.episodes end
+  return ns.everyTrack
+end
+
+-- Plays a track: inside the selected playlist if it contains it, otherwise in its virtual playlist.
+local function playTrack(t)
+  local pl = ns.GetPlaylist(LUI.selected)
+  if pl and pl.has[t.file] then
+    ns.PlayFrom(LUI.selected, t)
+  else
+    ns.PlayFrom(t.game and ns.GAME or t.podcast and ns.PODCAST or ns.ALL, t)
+  end
+end
+
 local function visibleTracks()
   local data = {}
   local pl = ns.GetPlaylist(LUI.selected)
   local only = f.onlyIn:GetChecked() and selectedIsUser()
   local q = (f.search:GetText() or ""):lower()
-  for _, t in ipairs(ns.tracks) do
+  for _, t in ipairs(baseTracks()) do
     if (not only or pl.has[t.file]) and (q == "" or t._search:find(q, 1, true)) then
       data[#data + 1] = t
     end
@@ -237,6 +282,16 @@ local function buildTrackColumn()
   f.trackHeader:SetWidth(345)
   f.trackHeader:SetJustifyH("LEFT")
   f.trackHeader:SetWordWrap(false)
+
+  -- source filter (only with a user playlist selected): all / my tracks / WoW music
+  f.source = ns.MakeDropdown(f, 118, L.SOURCE_ALL, function(_, root)
+    for _, opt in ipairs({ { "all", L.SOURCE_ALL }, { "mine", L.SOURCE_MINE }, { "podcast", L.PODCASTS }, { "game", L.GAME_MUSIC } }) do
+      ns.StyleMenuItem(root:CreateRadio(opt[2],
+        function() return LUI.source == opt[1] end,
+        function() LUI.source = opt[1] LUI:RefreshTracks() end))
+    end
+  end)
+  if f.source then f.source:SetPoint("TOPRIGHT", f, "TOPLEFT", 582, -34) end
 
   f.search = editbox(f, 180)
   f.search:SetPoint("TOPLEFT", 246, -58)
@@ -267,30 +322,66 @@ local function buildTrackColumn()
     end)
     row.title = text(row, "GameFontHighlight")
     row.title:SetPoint("TOPLEFT", 28, -3)
-    row.title:SetWidth(240)
+    row.title:SetWidth(218)
     row.title:SetJustifyH("LEFT")
     row.title:SetWordWrap(false)
     row.sub = text(row, "GameFontDisableSmall")
     row.sub:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -1)
-    row.sub:SetWidth(240)
+    row.sub:SetWidth(218)
     row.sub:SetJustifyH("LEFT")
     row.sub:SetWordWrap(false)
     row.dur = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.dur:SetPoint("RIGHT", -30, 0)
-    row.play = button(row, ">", 24, function() ns.PlayFrom(LUI.selected or ns.ALL, row.item) end)
+    row.play = button(row, ">", 24, function() playTrack(row.item) end)
     row.play:SetHeight(20)
     row.play:SetPoint("RIGHT", -2, 0)
-    row:SetScript("OnDoubleClick", function(self) ns.PlayFrom(LUI.selected or ns.ALL, self.item) end)
+    row:SetScript("OnDoubleClick", function(self) playTrack(self.item) end)
+    -- favourite star
+    row.fav = CreateFrame("Button", nil, row)
+    row.fav:SetSize(14, 14)
+    row.fav:SetPoint("RIGHT", -64, 0)
+    row.fav:SetNormalTexture("Interface\\Common\\FavoritesIcon")
+    row.fav:SetScript("OnClick", function() ns.ToggleFavorite(row.item) end)
+    -- right-click: favourite / never play
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, mouseButton)
+      if mouseButton ~= "RightButton" or not (MenuUtil and MenuUtil.CreateContextMenu) then return end
+      local t = self.item
+      MenuUtil.CreateContextMenu(self, function(_, root)
+        ns.StyleMenuItem(root:CreateButton(ns.IsFavorite(t) and L.FAV_REMOVE or L.FAV_ADD, function() ns.ToggleFavorite(t) end))
+        ns.StyleMenuItem(root:CreateButton(ns.IsExcluded(t) and L.INCLUDE or L.EXCLUDE,
+          function() ns.SetExcluded(t, not ns.IsExcluded(t)) end))
+      end)
+    end)
   end, function(row, t)
     local user = selectedIsUser()
     row.check:SetShown(user)
     if user then row.check:SetChecked(ns.GetPlaylist(LUI.selected).has[t.file] == true) end
     ns.SetText(row.title, t.title, "GameFontHighlight")
     local sub = t.artist or ""
-    if t.folder ~= "" then sub = sub ~= "" and (sub .. "  ·  " .. t.folder) or t.folder end
+    if t.parts then
+      -- podcast: episode date and, if started, the part it resumes from
+      sub = sub .. "  ·  " .. (t.album or "")
+      local prog = ns.db.podcastProgress[t.file]
+      if prog and not prog.done and (prog.part or 1) > 1 then
+        sub = sub .. "  ·  " .. L.PART_FMT:format(ns.EpisodePart(t), #t.parts)
+      end
+    elseif t.folder ~= "" then
+      sub = sub ~= "" and (sub .. "  ·  " .. t.folder) or t.folder
+    end
     ns.SetText(row.sub, sub, "GameFontDisableSmall")
     row.dur:SetText((tonumber(t.duration) or 0) > 0 and ns.FormatTime(t.duration) or "")
-    if ns.Player.track == t then row.title:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3])
+    if LUI.selected == ns.TOP and ns.db.stats[t.file] then
+      ns.SetText(row.sub, sub .. "  ·  " .. L.PLAYS_FMT:format(ns.db.stats[t.file].plays or 0), "GameFontDisableSmall")
+    end
+    local favTex = row.fav:GetNormalTexture()
+    if favTex then
+      local isFav = ns.IsFavorite(t)
+      favTex:SetDesaturated(not isFav)
+      favTex:SetAlpha(isFav and 1 or 0.3)
+    end
+    if ns.IsExcluded(t) then row.title:SetTextColor(0.45, 0.45, 0.45)
+    elseif ns.Player.track == t then row.title:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3])
     else row.title:SetTextColor(1, 1, 1) end
   end)
   f.tracks:SetPoint("TOPLEFT", 240, -84)
@@ -312,13 +403,13 @@ local function buildTrackColumn()
 end
 
 ---------------------------------------------------------------------------
--- Finestra
+-- Window
 ---------------------------------------------------------------------------
 function LUI:Build()
   if f then return end
   self.selected = ns.ALL
   f = CreateFrame("Frame", "KalimdorZugZugLibraryFrame", UIParent, "BackdropTemplate")
-  f:SetSize(600, 520)
+  f:SetSize(600, 556)
   f:SetPoint("CENTER")
   f:SetFrameStrata("HIGH")
   f:SetClampedToScreen(true)
@@ -331,21 +422,22 @@ function LUI:Build()
   f:SetBackdropColor(0.06, 0.05, 0.05, 0.96)
   f:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.8)
   f:Hide()
-  if UISpecialFrames then table.insert(UISpecialFrames, f:GetName()) end -- ESC chiude la finestra
+  if UISpecialFrames then table.insert(UISpecialFrames, f:GetName()) end -- ESC closes the window
 
-  local title = text(f, "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 14, -12)
-  title:SetText(L.LIB_TITLE)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", 2, 2)
+  f.titleFS = text(f, "GameFontNormal")
+  f.titleFS:SetText(L.LIB_TITLE)
+  f.closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+  f.closeBtn:SetPoint("TOPRIGHT", 2, 2)
 
   f.settingsBtn = button(f, L.SETTINGS, 90, function() ns.Settings:Open() end)
   fitButton(f.settingsBtn, 90)
-  f.settingsBtn:SetPoint("TOPRIGHT", -30, -10)
+  f.settingsBtn:SetPoint("BOTTOMRIGHT", -16, 14)
 
   buildPlaylistColumn()
   buildTrackColumn()
   f:SetScript("OnShow", function() LUI:Refresh() end)
+  ns.SkinWindow(f, f.titleFS, f.closeBtn)
+  ns.On("SETTINGS_CHANGED", function() ns.SkinWindow(f, f.titleFS, f.closeBtn) end)
 
   ns.On("PLAYLISTS_CHANGED", function() if f:IsShown() then LUI:Refresh() end end)
   ns.On("MODE_CHANGED", function() if f:IsShown() then LUI:Refresh() end end)
@@ -359,23 +451,32 @@ function LUI:RefreshTracks()
   f.addAll:SetEnabled(user)
   f.removeAll:SetEnabled(user)
   f.onlyIn:SetEnabled(user)
+  if f.source then
+    f.source:SetShown(user)
+    if f.source.GenerateMenu then f.source:GenerateMenu() end
+  end
+  f.trackHeader:SetWidth(user and f.source and 220 or 345)
   if user then
     ns.SetText(f.trackHeader, L.TRACKS_HEADER_USER:format(LUI.selected), "GameFontNormal")
+  elseif LUI.selected == ns.GAME then
+    ns.SetText(f.trackHeader, L.TRACKS_HEADER_GAME, "GameFontNormal")
+  elseif LUI.selected == ns.PODCAST then
+    ns.SetText(f.trackHeader, L.TRACKS_HEADER_PODCAST, "GameFontNormal")
   else
     ns.SetText(f.trackHeader, L.TRACKS_HEADER_ALL, "GameFontNormal")
   end
-  f.trackCount:SetText(("%d / %d"):format(#data, #ns.tracks))
+  f.trackCount:SetText(("%d / %d"):format(#data, #baseTracks()))
 end
 
 function LUI:Refresh()
   if not f then return end
+  ns.InvalidateDynamic() -- history / most played are recomputed when the library is looked at
   if not ns.GetPlaylist(self.selected) then self.selected = ns.ALL end
-  local names = ns.PlaylistNames()
-  table.insert(names, 1, ns.ALL)
-  f.playlists:SetData(names)
+  f.playlists:SetData(ns.AllPlaylistNames())
   local user = selectedIsUser()
   f.rename:SetEnabled(user)
   f.delete:SetEnabled(user)
+  f.export:SetEnabled(user)
   self:RefreshTracks()
 end
 
