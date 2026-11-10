@@ -75,8 +75,14 @@ The full guide is on [GitHub](https://github.com/MikeAymeric/KalimdorZugZugRadio
 
 ## Screenshots to upload
 
-1. The player in classic style, playing a track with its cover.
-2. The library with a playlist selected and the track list.
-3. The settings panel with the conditions.
-4. The "Now playing" banner above the chat.
-5. The compact player.
+Files in `docs/screenshots/`:
+
+1. `1-campfire-auto.png`: automatic mode, sitting at a campfire switches to the Campfire playlist.
+2. `2-library.png`: the library, with playlists, search and the game soundtrack.
+3. `3-settings.png`: the settings panel, with a playlist and a volume for each condition.
+4. `4-player.png`: the player, with cover, title, remaining time, volume and controls.
+5. `5-compact-tirisfal.png`: the compact player.
+
+## Release package
+
+Build it from the release tag so no personal music, covers or podcast list ends up in it: `git archive --format=zip <tag> KalimdorZugZugRadio`, plus the root `LICENSE` copied in as `KalimdorZugZugRadio/LICENSE.txt`. The zip must contain only the `KalimdorZugZugRadio` folder, with the empty placeholder `Library.lua`.
