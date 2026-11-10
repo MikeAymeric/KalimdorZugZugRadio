@@ -23,7 +23,11 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 
 ## Installation
 
-1. Download this repository: the green **Code** button, then **Download ZIP** (or the latest release, if available).
+**From CurseForge or Wago**: install *Kalimdor ZugZug Radio* with the CurseForge app or the Wago app, choosing WoW Forever as the game version.
+
+**Manually**:
+
+1. Download **`KalimdorZugZugRadio-vX.Y.Z.zip`** from the [latest release](https://github.com/MikeAymeric/KalimdorZugZugRadio/releases/latest).
 2. Extract the ZIP.
 3. Copy the **`KalimdorZugZugRadio`** folder into your game folder:
    ```
@@ -43,11 +47,13 @@ You can already listen to the game soundtrack: open the library (the **Library**
    World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio\music\
    ```
    You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
-2. Open a terminal in the folder where you extracted this repository and run:
+2. In the addon folder, double-click **`Import music.bat`**. A window shows the progress; press a key to close it at the end.
+
+   You can also run the script from a terminal opened in the addon folder, which lets you add options:
    ```
-   python tools\import_music.py
+   python tools\import_music.py --keep-originals
    ```
-   The script finds the addon in your game folder by itself. If it can't, tell it where the addon is:
+   The script finds the addon by itself. If you run it from somewhere else and it can't find it, pass the folder:
    ```
    python tools\import_music.py --addon "D:\Path\To\World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio"
    ```
@@ -62,13 +68,13 @@ What the script does:
 
 ## Podcasts
 
-1. Create a file named **`podcasts.txt`** in the addon folder (`...\AddOns\KalimdorZugZugRadio\podcasts.txt`), or run `python tools\import_music.py --podcasts` once to create a template.
+1. Create a file named **`podcasts.txt`** in the addon folder (`...\AddOns\KalimdorZugZugRadio\podcasts.txt`), or run `python tools\import_music.py --podcasts` from the addon folder once to create a template.
 2. Add one podcast per line: the RSS feed address or the Apple Podcasts page link, followed by how many recent episodes to keep (3 if omitted):
    ```
    https://example.com/feed/my-podcast.xml 3
    https://podcasts.apple.com/us/podcast/name/id1234567890 2
    ```
-3. Run `python tools\import_music.py` before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
+3. Double-click **`Import music.bat`** before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
 
 In game the episodes are in the **Podcasts** playlist. WoW can't resume a file halfway, so each episode is split into 2:30 parts: the addon remembers the part you reached (even after logging out) and resumes from there.
 
@@ -169,7 +175,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 
 ## Development
 
-- `tools/import_music.py`: imports music and podcasts (see above).
+- `KalimdorZugZugRadio/tools/import_music.py`: imports music and podcasts (see above). It lives inside the addon folder so that users installing from CurseForge or Wago have it too; `Import music.bat` runs it with a double-click.
 - `tools/build_game_music.py`: regenerates the game soundtrack catalog (`GameMusic.lua`) from the WoW community listfile. For developers only: the generated file is already included.
 - `tests/`: run `npm install`, then `npm test` (the addon logic in a Lua VM with simulated WoW APIs) and `npm run lint` (Lua syntax check).
 - `RadioProbe/`: a small addon that checks which game APIs work on the client.
