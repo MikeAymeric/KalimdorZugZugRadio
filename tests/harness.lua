@@ -135,8 +135,8 @@ function GetAddOnMemoryUsage() return 321 end
 ChatFrame1 = stub()
 
 KZZR_Library = { tracks = {
-  { file = "music\\a.ogg", folder = "", title = "A", artist = "X", duration = 10 },
-  { file = "music\\b.ogg", folder = "", title = "B", duration = 10 },
+  { file = "music\\a.ogg", folder = "", title = "A", artist = "X", duration = 10, genre = "City Pop", year = 1983, track = 2 },
+  { file = "music\\b.ogg", folder = "", title = "B", duration = 10, genre = "City Pop", year = 1985, track = 1, composer = "Yamashita" },
   { file = "music\\c.mp3", folder = "Rock", title = "C", duration = 10 },
   { file = "music/Podcast/P/e1/part_000.ogg", folder = "Podcast/Pod", title = "Ep 1", artist = "Pod", album = "2026-11-09", duration = 150, episode = "k1", part = 1, parts = 3 },
   { file = "music/Podcast/P/e1/part_001.ogg", folder = "Podcast/Pod", title = "Ep 1", artist = "Pod", album = "2026-11-09", duration = 150, episode = "k1", part = 2, parts = 3 },
@@ -930,6 +930,22 @@ do
   ns.SetMode("auto")
   for _, n in ipairs({ "AnyOf", "Played", "FavNew", "Fresh" }) do ns.DeletePlaylist(n) end
 
+  -- genre, composer, year (from the tags)
+  ns.SaveSmartPlaylist(nil, "Eighties", { rules = { { field = "year", op = "ge", value = "1980" },
+    { field = "year", op = "le", value = "1984" } } })
+  ns.SaveSmartPlaylist(nil, "ByComposer", { rules = { { field = "composer", op = "has", value = "yama" },
+    { field = "genre", op = "is", value = "city pop" } } })
+  check("smart playlist: year range (tracks without a year left out), composer + genre",
+    #ns.GetPlaylist("Eighties").tracks == 1 and ns.GetPlaylist("Eighties").tracks[1] == a
+    and #ns.GetPlaylist("ByComposer").tracks == 1 and ns.GetPlaylist("ByComposer").tracks[1] == b)
+  ns.DeletePlaylist("Eighties"); ns.DeletePlaylist("ByComposer")
+  local genres = ns.Groups(ns.tracks, "genre")
+  check("genre view: City Pop and unknown genre", #genres == 2 and genres[1].label == "City Pop" and genres[1].count == 2
+    and genres[2].label == "Unknown genre")
+  local cityPop = ns.GetPlaylist(ns.GroupPlaylistName("genre", a))
+  check("tracks in album order (track number before title)", cityPop.tracks[1] == b and cityPop.tracks[2] == a)
+  check("search finds the genre and the composer", a._search:find("city pop", 1, true) and b._search:find("yamashita", 1, true))
+
   -- albums and artists
   local albumName = ns.GroupPlaylistName("album", orgri)
   check("album playlist of a game track", ns.GetPlaylist(albumName) and #ns.GetPlaylist(albumName).tracks == 1
@@ -944,23 +960,23 @@ do
   ns.SetMode("auto")
 
   -- "Play next" queue
-  ns.PlayFrom(ns.ALL, a)
+  ns.PlayFrom(ns.ALL, b) -- library order: b (track 1), a (track 2), c
   ns.QueueTracks({ orgri }, true)
   check("queued track listed", #ns.QueuedTracks() == 1 and ns.QueuedTracks()[1] == orgri)
   ns.Player:Next()
   check("Next plays the queued track", playing == 53198 and ns.Player.fromQueue and #ns.db.upNext == 0)
   ns.Player:Next()
-  check("then the playlist goes on after the track it was on", is("b.ogg") and not ns.Player.fromQueue)
+  check("then the playlist goes on after the track it was on", is("a.ogg") and not ns.Player.fromQueue)
   ns.QueueTracks({ orgri, ns.trackById["game:8158670"] }, false)
   ns.QueueTracks({ c }, true)
   check("Play next goes before what is queued", ns.db.upNext[1] == c.file and #ns.db.upNext == 3)
   ns.Player:Next()
   check("queued track from the same playlist", is("c.mp3") and ns.Player.fromQueue)
   ns.Player:Prev()
-  check("Prev on a queued track goes back to the playlist's track", is("b.ogg") and not ns.Player.fromQueue)
+  check("Prev on a queued track goes back to the playlist's track", is("a.ogg") and not ns.Player.fromQueue)
   ns.UnqueueTrack(orgri)
   check("a track can be taken out of the queue", #ns.db.upNext == 1 and ns.db.upNext[1] == "game:8158670")
-  advance(11) -- b ends by itself: the queue goes first
+  advance(11) -- a ends by itself: the queue goes first
   check("end of a track plays the queue", playing == 8158670)
   ns.ClearQueue()
   ns.SetMode("auto")
@@ -984,6 +1000,7 @@ do
   local ok = pcall(function()
     ns.LibraryUI.view = "album"; ns.LibraryUI:Refresh()
     ns.LibraryUI.view = "artist"; ns.LibraryUI:Refresh()
+    ns.LibraryUI.view = "genre"; ns.LibraryUI:Refresh()
     ns.LibraryUI.view = "tracks"; ns.LibraryUI:Refresh()
     ns.LibraryUI:OpenSmartEditor(nil)
   end)

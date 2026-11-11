@@ -247,6 +247,11 @@ LOCALES.enUS = {
   VARIOUS_ARTISTS = "Various artists",
   UNKNOWN_ARTIST = "Unknown artist",
   UNKNOWN_ALBUM = "Unknown album",
+  SMART_F_genre = "Genre",
+  SMART_F_composer = "Composer",
+  SMART_F_year = "Year",
+  VIEW_GENRES = "Genres",
+  UNKNOWN_GENRE = "Unknown genre",
 }
 
 LOCALES.frFR = {
@@ -474,6 +479,11 @@ LOCALES.frFR = {
   VARIOUS_ARTISTS = "Artistes divers",
   UNKNOWN_ARTIST = "Artiste inconnu",
   UNKNOWN_ALBUM = "Album inconnu",
+  SMART_F_genre = "Genre",
+  SMART_F_composer = "Compositeur",
+  SMART_F_year = "Année",
+  VIEW_GENRES = "Genres",
+  UNKNOWN_GENRE = "Genre inconnu",
 }
 
 LOCALES.deDE = {
@@ -701,6 +711,11 @@ LOCALES.deDE = {
   VARIOUS_ARTISTS = "Verschiedene Künstler",
   UNKNOWN_ARTIST = "Unbekannter Künstler",
   UNKNOWN_ALBUM = "Unbekanntes Album",
+  SMART_F_genre = "Genre",
+  SMART_F_composer = "Komponist",
+  SMART_F_year = "Jahr",
+  VIEW_GENRES = "Genres",
+  UNKNOWN_GENRE = "Unbekanntes Genre",
 }
 
 LOCALES.esES = {
@@ -928,6 +943,11 @@ LOCALES.esES = {
   VARIOUS_ARTISTS = "Varios artistas",
   UNKNOWN_ARTIST = "Artista desconocido",
   UNKNOWN_ALBUM = "Álbum desconocido",
+  SMART_F_genre = "Género",
+  SMART_F_composer = "Compositor",
+  SMART_F_year = "Año",
+  VIEW_GENRES = "Géneros",
+  UNKNOWN_GENRE = "Género desconocido",
 }
 
 -- Latin American Spanish: starts from European Spanish and changes terms and verb forms.
@@ -1171,6 +1191,11 @@ LOCALES.ptBR = {
   VARIOUS_ARTISTS = "Vários artistas",
   UNKNOWN_ARTIST = "Artista desconhecido",
   UNKNOWN_ALBUM = "Álbum desconhecido",
+  SMART_F_genre = "Gênero",
+  SMART_F_composer = "Compositor",
+  SMART_F_year = "Ano",
+  VIEW_GENRES = "Gêneros",
+  UNKNOWN_GENRE = "Gênero desconhecido",
 }
 
 LOCALES.itIT = {
@@ -1398,6 +1423,11 @@ LOCALES.itIT = {
   VARIOUS_ARTISTS = "Artisti vari",
   UNKNOWN_ARTIST = "Artista sconosciuto",
   UNKNOWN_ALBUM = "Album sconosciuto",
+  SMART_F_genre = "Genere",
+  SMART_F_composer = "Compositore",
+  SMART_F_year = "Anno",
+  VIEW_GENRES = "Generi",
+  UNKNOWN_GENRE = "Genere sconosciuto",
 }
 
 LOCALES.ruRU = {
@@ -1625,6 +1655,11 @@ LOCALES.ruRU = {
   VARIOUS_ARTISTS = "Разные исполнители",
   UNKNOWN_ARTIST = "Неизвестный исполнитель",
   UNKNOWN_ALBUM = "Неизвестный альбом",
+  SMART_F_genre = "Жанр",
+  SMART_F_composer = "Композитор",
+  SMART_F_year = "Год",
+  VIEW_GENRES = "Жанры",
+  UNKNOWN_GENRE = "Неизвестный жанр",
 }
 
 LOCALES.zhCN = {
@@ -1852,6 +1887,11 @@ LOCALES.zhCN = {
   VARIOUS_ARTISTS = "群星",
   UNKNOWN_ARTIST = "未知艺人",
   UNKNOWN_ALBUM = "未知专辑",
+  SMART_F_genre = "流派",
+  SMART_F_composer = "作曲",
+  SMART_F_year = "年份",
+  VIEW_GENRES = "流派",
+  UNKNOWN_GENRE = "未知流派",
 }
 
 LOCALES.zhTW = {
@@ -2079,6 +2119,11 @@ LOCALES.zhTW = {
   VARIOUS_ARTISTS = "群星",
   UNKNOWN_ARTIST = "未知演出者",
   UNKNOWN_ALBUM = "未知專輯",
+  SMART_F_genre = "類型",
+  SMART_F_composer = "作曲",
+  SMART_F_year = "年份",
+  VIEW_GENRES = "類型",
+  UNKNOWN_GENRE = "未知類型",
 }
 
 LOCALES.jaJP = {
@@ -2306,6 +2351,11 @@ LOCALES.jaJP = {
   VARIOUS_ARTISTS = "複数のアーティスト",
   UNKNOWN_ARTIST = "不明なアーティスト",
   UNKNOWN_ALBUM = "不明なアルバム",
+  SMART_F_genre = "ジャンル",
+  SMART_F_composer = "作曲者",
+  SMART_F_year = "年",
+  VIEW_GENRES = "ジャンル",
+  UNKNOWN_GENRE = "不明なジャンル",
 }
 
 LOCALES.koKR = {
@@ -2533,6 +2583,11 @@ LOCALES.koKR = {
   VARIOUS_ARTISTS = "여러 아티스트",
   UNKNOWN_ARTIST = "알 수 없는 아티스트",
   UNKNOWN_ALBUM = "알 수 없는 앨범",
+  SMART_F_genre = "장르",
+  SMART_F_composer = "작곡가",
+  SMART_F_year = "연도",
+  VIEW_GENRES = "장르",
+  UNKNOWN_GENRE = "알 수 없는 장르",
 }
 
 ---------------------------------------------------------------------------

@@ -261,6 +261,77 @@ def tags_of(info: dict) -> dict:
     return tags
 
 
+MP4_EXT = {".mp4", ".m4a", ".m4b", ".m4v", ".mov", ".3gp"}
+MP4_CONTAINERS = {b"moov", b"udta", b"ilst"}
+
+
+def mp4_genre(path: Path) -> str | None:
+    """The text genre of an MP4/M4A file (iTunes '\\xa9gen' atom, or a text 'gnre').
+
+    Store-bought files often carry the genre as text in 'gnre' too, which ffmpeg decodes as an
+    ID3v1 genre number (its second character): "Game Soundtrack" becomes "Big Band". So the genre of
+    these files is read here, seeking from atom to atom (the audio data is never read)."""
+    found: dict[bytes, str] = {}
+
+    def walk(f, start: int, end: int, parent: bytes) -> None:
+        pos = start
+        while pos + 8 <= end:
+            f.seek(pos)
+            head = f.read(16)
+            if len(head) < 8:
+                return
+            size, kind = int.from_bytes(head[:4], "big"), head[4:8]
+            header = 8
+            if size == 1 and len(head) == 16:
+                size, header = int.from_bytes(head[8:16], "big"), 16
+            elif size == 0:
+                size = end - pos
+            if size < header:
+                return
+            body = pos + header
+            if kind == b"meta":
+                walk(f, body + 4, pos + size, kind)  # 4 bytes of version/flags first
+            elif kind in MP4_CONTAINERS:
+                walk(f, body, pos + size, kind)
+            elif parent == b"ilst" and kind in (b"\xa9gen", b"gnre") and size < 4096:
+                f.seek(body)
+                data = f.read(size - header)
+                # child 'data' atom: size(4) 'data' type(4) locale(4) payload; type 1 = UTF-8 text
+                if len(data) >= 16 and data[4:8] == b"data" and int.from_bytes(data[8:12], "big") & 0xFFFFFF == 1:
+                    text = data[16:int.from_bytes(data[:4], "big")].decode("utf-8", "replace").replace("\x00", "").strip()
+                    if text:
+                        found[kind] = text
+            pos += size
+
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            walk(f, 0, f.tell(), b"")
+    except OSError:
+        return None
+    return found.get(b"\xa9gen") or found.get(b"gnre")
+
+
+def genre_of(path: Path, tags: dict) -> str:
+    """The track's genre: from the MP4 atoms for MP4 files, from the tags otherwise."""
+    if path.suffix.lower() in MP4_EXT:
+        g = mp4_genre(path)
+        if g:
+            return g
+    return (tags.get("genre") or "").strip()
+
+
+def number_of(value: str | None) -> int | None:
+    """'3/12' -> 3, '2008-05-01' -> 2008 (the first number), None if there is none."""
+    m = re.match(r"\s*(\d+)", value or "")
+    return int(m.group(1)) if m else None
+
+
+def year_of(tags: dict) -> int | None:
+    m = re.search(r"(1[89]\d\d|2\d\d\d)", tags.get("date") or tags.get("year") or "")
+    return int(m.group(1)) if m else None
+
+
 def duration_of(info: dict) -> float:
     candidates = [info.get("format", {}).get("duration")]
     candidates += [s.get("duration") for s in info.get("streams", []) if s.get("codec_type") == "audio"]
@@ -367,8 +438,12 @@ def converted_ok(dst: Path) -> bool:
 
 
 def convert_to_ogg(src: Path, dst: Path) -> None:
+    extra = []
+    genre = mp4_genre(src) if src.suffix.lower() in MP4_EXT else None
+    if genre:  # the right genre, not ffmpeg's misreading of a text 'gnre' atom
+        extra = ["-metadata", f"genre={genre}"]
     res = run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
-               "-map", "0:a:0", "-vn", "-map_metadata", "0",
+               "-map", "0:a:0", "-vn", "-map_metadata", "0", *extra,
                "-c:a", "libvorbis", "-q:a", "5", str(dst)])
     if res.returncode != 0:
         dst.unlink(missing_ok=True)
@@ -759,6 +834,11 @@ def process_folder(folder: Path, keep_originals: bool, stats: dict) -> list[dict
             "album": tags.get("album", ""),
             "duration": duration,
             "cover": wow_path(COVERS_DIR / cover) if cover else None,
+            "genre": genre_of(path, tags),
+            "year": year_of(tags),
+            "composer": (tags.get("composer") or "").strip(),
+            "track": number_of(tags.get("track")),
+            "disc": number_of(tags.get("disc")),
         })
     return tracks
 
@@ -771,21 +851,52 @@ def original_rel_path(rel_file: str) -> tuple[Path, str]:
     return Path(*folders) if folders else Path("."), original_names.get(stem, stem)
 
 
-def recover_covers(tracks: list[dict], source_root: Path, stats: dict) -> int:
+class OriginalFinder:
+    """Finds the original of an imported track in another folder (same folders and file name, any
+    audio extension, ASCII renaming undone). The folder is only read, never modified."""
+
+    def __init__(self, source_root: Path):
+        self.root = source_root
+        self.listing: dict[Path, dict[str, Path]] = {}
+
+    def folder_of(self, rel_file: str) -> Path:
+        return self.root / original_rel_path(rel_file)[0]
+
+    def find(self, rel_file: str) -> Path | None:
+        rel_dir, stem = original_rel_path(rel_file)
+        folder = self.root / rel_dir
+        if folder not in self.listing:
+            self.listing[folder] = {unicodedata.normalize("NFC", p.stem).casefold(): p for p in sorted(folder.iterdir())
+                                    if p.is_file() and p.suffix.lower() in AUDIO_EXT} if folder.is_dir() else {}
+        return self.listing[folder].get(unicodedata.normalize("NFC", stem).casefold())
+
+
+def recover_genres(tracks: list[dict], finder: OriginalFinder) -> int:
+    """Tracks converted before 1.0 carry ffmpeg's wrong genre ("Big Band" for "Game Soundtrack"):
+    the right one is read from the MP4 original in your music library."""
+    fixed = 0
+    for t in tracks:
+        if t.get("episode"):
+            continue
+        src = finder.find(t["file"])
+        if src and src.suffix.lower() in MP4_EXT:
+            g = mp4_genre(src)
+            if g and g != t.get("genre"):
+                t["genre"] = g
+                fixed += 1
+    return fixed
+
+
+def recover_covers(tracks: list[dict], source_root: Path, stats: dict, finder: OriginalFinder | None = None) -> int:
     """--covers-from: for tracks without a cover, extracts it from the matching original (same folders
     and file name, any extension) in source_root. source_root is only read, never modified."""
-    audio_ext = NATIVE | CONVERT
-    listing: dict[Path, dict[str, Path]] = {}
+    finder = finder or OriginalFinder(source_root)
     recovered = 0
     for t in tracks:
         if t["cover"] or t.get("episode"):
             continue
-        rel_dir, stem = original_rel_path(t["file"])
-        folder = source_root / rel_dir
-        if folder not in listing:
-            listing[folder] = {unicodedata.normalize("NFC", p.stem).casefold(): p for p in sorted(folder.iterdir())
-                               if p.is_file() and p.suffix.lower() in audio_ext} if folder.is_dir() else {}
-        src = listing[folder].get(unicodedata.normalize("NFC", stem).casefold())
+        folder = finder.folder_of(t["file"])
+        src = finder.find(t["file"])
         cover = None
         try:
             if src:
@@ -819,6 +930,12 @@ def write_library(tracks: list[dict]) -> None:
                   f"album = {lua_text(t['album'])}", f"duration = {t['duration']}"]
         if t["cover"]:
             fields.append(f"cover = {lua_str(t['cover'])}")
+        for key in ("genre", "composer"):
+            if t.get(key):
+                fields.append(f"{key} = {lua_text(t[key])}")
+        for key in ("year", "track", "disc"):
+            if t.get(key):
+                fields.append(f"{key} = {int(t[key])}")
         if t.get("episode"):
             fields += [f"episode = {lua_str(t['episode'])}", f"part = {t['part']}", f"parts = {t['parts']}"]
         lines.append("    { " + ", ".join(fields) + " },")
@@ -1134,14 +1251,16 @@ def main() -> None:
             print(f"[{folder.relative_to(MUSIC_DIR).as_posix()}] {len(found)} tracks")
         tracks.extend(found)
 
-    recovered = 0
+    recovered = genres_fixed = 0
     covers_source = args.covers_from or args.library
     if covers_source:
         source_root = Path(covers_source).expanduser()
         if not source_root.is_dir():
             sys.exit(f"ERROR: folder {source_root} not found (--covers-from)")
-        print(f"\nRecovering missing covers from {source_root} ...")
-        recovered = recover_covers(tracks, source_root, stats)
+        finder = OriginalFinder(source_root)
+        print(f"\nRecovering missing covers and genres from {source_root} ...")
+        recovered = recover_covers(tracks, source_root, stats, finder)
+        genres_fixed = recover_genres(tracks, finder)
 
     write_library(tracks)
     save_cover_index()
@@ -1154,6 +1273,9 @@ def main() -> None:
     print(f"Covers: {unique} distinct images for {with_cover} tracks"
           + (f", {recovered} recovered from {Path(covers_source)}" if covers_source else "")
           + (f" ({removed} unused files removed)" if removed else "") + ".")
+    with_genre = sum(1 for t in tracks if t.get("genre") and not t.get("episode"))
+    print(f"Genres: {with_genre} tracks have one"
+          + (f", {genres_fixed} corrected from the originals in {Path(covers_source)}" if genres_fixed else "") + ".")
     missing = [t for t in tracks if not t["cover"] and not t.get("episode")]
     if missing:
         by_folder: dict[str, int] = {}

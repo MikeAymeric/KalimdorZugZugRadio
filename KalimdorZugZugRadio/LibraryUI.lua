@@ -271,8 +271,8 @@ end
 -- Column 2: tracks, or albums / artists
 ---------------------------------------------------------------------------
 LUI.source = "all" -- with a user playlist selected: "all" | "mine" | "podcast" | "game"
-LUI.view = "tracks" -- "tracks" | "album" | "artist"
-LUI.group = nil     -- the album/artist opened in the album/artist view (an ns.Groups entry)
+LUI.view = "tracks" -- "tracks" | "album" | "artist" | "genre"
+LUI.group = nil     -- the album/artist/genre opened in its view (an ns.Groups entry)
 
 -- Tracks to work on: those of the selected virtual or smart playlist or, for a user playlist,
 -- the user's tracks and/or the game music, according to the "source" filter.
@@ -467,13 +467,14 @@ local function buildViewBar()
   -- Tracks / Albums / Artists
   f.viewBtns = {}
   local prev
-  for _, v in ipairs({ { "tracks", L.VIEW_TRACKS }, { "album", L.VIEW_ALBUMS }, { "artist", L.VIEW_ARTISTS } }) do
-    local b = button(f, v[2], 80, function()
+  for _, v in ipairs({ { "tracks", L.VIEW_TRACKS }, { "album", L.VIEW_ALBUMS }, { "artist", L.VIEW_ARTISTS },
+                       { "genre", L.VIEW_GENRES } }) do
+    local b = button(f, v[2], 70, function()
       LUI.view, LUI.group = v[1], nil
       f.groups:ScrollToTop()
       LUI:RefreshTracks()
     end)
-    fitButton(b, 80)
+    fitButton(b, 70)
     if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", 240, -84) end
     b.view = v[1]
     f.viewBtns[#f.viewBtns + 1] = b

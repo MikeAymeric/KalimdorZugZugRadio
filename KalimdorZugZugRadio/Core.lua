@@ -222,14 +222,20 @@ ns.TOP = "__top"         -- most played
 -- Podcast episodes are split into parts (Library.lua: episode/part/parts fields): here they become
 -- a single track with t.parts = { {file, duration}, ... } and id "ep:<key>".
 
+-- Folder, then album order (disc and track number, when the tags have them), then title.
 local function byFolderTitle(a, b)
   if a.folder ~= b.folder then return a.folder < b.folder end
+  local da, db = tonumber(a.disc) or 0, tonumber(b.disc) or 0
+  if da ~= db then return da < db end
+  local ta, tb = tonumber(a.track) or 0, tonumber(b.track) or 0
+  if ta ~= tb then return ta < tb end
   return a.title:lower() < b.title:lower()
 end
 
 local function indexTrack(t, list, byId)
   t.folder = t.folder or ""
-  t._search = (t.title .. " " .. (t.artist or "") .. " " .. (t.album or "") .. " " .. t.folder):lower()
+  t._search = (t.title .. " " .. (t.artist or "") .. " " .. (t.album or "") .. " " .. t.folder .. " "
+    .. (t.genre or "") .. " " .. (t.composer or "")):lower()
   table.insert(list, t)
   byId[t.file] = t
   ns.trackById[t.file] = t
@@ -551,6 +557,7 @@ end
 ---------------------------------------------------------------------------
 ns.SMART_FIELDS = {
   { key = "title", kind = "text" }, { key = "artist", kind = "text" }, { key = "album", kind = "text" },
+  { key = "genre", kind = "text" }, { key = "composer", kind = "text" }, { key = "year", kind = "number" },
   { key = "folder", kind = "text" }, { key = "source", kind = "source" }, { key = "plays", kind = "number" },
   { key = "minutes", kind = "number" }, { key = "favorite", kind = "flag" }, { key = "never", kind = "flag" },
 }
@@ -588,6 +595,9 @@ local function matchRule(t, r)
     if r.field == "plays" then
       local st = ns.db.stats[t.file]
       v = st and st.plays or 0
+    elseif r.field == "year" then
+      v = tonumber(t.year)
+      if not v then return false end -- no year in the tags: never matches a year rule
     else
       v = (tonumber(t.duration) or 0) / 60
     end
@@ -656,19 +666,23 @@ function ns.SaveSmartPlaylist(old, name, def)
 end
 
 ---------------------------------------------------------------------------
--- Albums and artists: virtual playlists "__album:<key>" / "__artist:<key>". They are not
--- listed in the menus, but can be played and assigned like any other.
+-- Albums, artists and genres: virtual playlists "__album:<key>" / "__artist:<key>" /
+-- "__genre:<key>". They are not listed in the menus, but can be played and assigned like any other.
 ---------------------------------------------------------------------------
-local GROUP_PREFIX = { album = "__album:", artist = "__artist:" }
+local GROUP_PREFIX = { album = "__album:", artist = "__artist:", genre = "__genre:" }
 
 function ns.GroupKey(kind, t)
   if kind == "artist" then return (t.artist or ""):lower() end
+  if kind == "genre" then return (t.genre or ""):lower() end
   return (t.album or ""):lower() .. " @ " .. (t.folder or "")
 end
 
 function ns.GroupLabel(kind, t)
   if kind == "artist" then
     return (t.artist and t.artist ~= "") and t.artist or L.UNKNOWN_ARTIST
+  end
+  if kind == "genre" then
+    return (t.genre and t.genre ~= "") and t.genre or L.UNKNOWN_GENRE
   end
   if t.album and t.album ~= "" then return t.album end
   return (t.folder or ""):match("([^/\\]+)$") or L.UNKNOWN_ALBUM
@@ -678,7 +692,7 @@ function ns.GroupPlaylistName(kind, t)
   return GROUP_PREFIX[kind] .. ns.GroupKey(kind, t)
 end
 
--- "album" | "artist" and the group key, if name is a group playlist.
+-- "album" | "artist" | "genre" and the group key, if name is a group playlist.
 function ns.GroupKind(name)
   if type(name) ~= "string" or name:sub(1, 2) ~= "__" then return nil end
   for kind, prefix in pairs(GROUP_PREFIX) do
