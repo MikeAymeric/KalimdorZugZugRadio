@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0
+
+- **Welcome guide**: a short step-by-step window (language, music source, ready-made playlists, tour) opens once for everyone. The *Tutorial* button in the settings and `/kzz tutorial` open it again.
+- **Ready-made playlists** of the game soundtrack, one per condition (boss, combat, dungeon, city, campfire, night...), created by the guide. Existing playlists and assignments are never overwritten.
+- **Music after a fight**: the fight music keeps playing and slowly fades out (4 to 10 s, default 8; Settings) before the next condition. If another fight starts meanwhile, the song goes on. After a boss the boss theme lasts while adds are still in combat.
+- **A new song every fight**, instead of resuming the one interrupted last time.
+- **Smart shuffle** (on by default): tracks you skip and the ones you just heard come up less often, tracks you never heard more often.
+- **Dungeon-specific music**: give a dungeon its own playlist (*Specific dungeons* in the Dungeon condition).
+- **Assign here** in the player's menu: give the current zone, dungeon or boss the playing playlist with one click.
+- **Zone music between tracks** (optional, off by default): in calm conditions the game's own zone music plays now and then between two tracks.
+- **Smart playlists**: playlists that fill themselves with the tracks matching their rules (title, artist, album, genre, composer, year, folder, source, plays, length, favourite, never played). They update by themselves and can be assigned to conditions like any other.
+- **Albums, Artists and Genres** views in the library, with covers: open one, play it whole or queue it.
+- **Play next / Add to queue** from the right-click menu; the player's menu shows what is *Up next*. The queue waits during fights.
+- **Import music.py reads the genre, year, composer and track numbers**. Many store-bought MP4 files used to show a wrong genre (for example "Big Band" for a game soundtrack, a decoding bug of ffmpeg): the right one is now read from the files, and from the originals in your music library for tracks converted before. **Run Import music.py again** once to add these fields; nothing is converted again.
+- Albums play in track order.
+- Renaming or deleting a playlist now updates its zone, dungeon and boss assignments in every profile.
+- The player's status line no longer repeats the condition ("Auto · Campfire" instead of "Auto · Campfire · Campfire").
+- If your playlists refer to tracks that are no longer in the library (for example after an update deleted your music), a message tells you to run Import music.py again.
+- `/kzz debug` shows more state for bug reports.
+
 ## 0.8.0
 
 - **Your music is safe when you update the addon.** Music, covers, `Library.lua`, `podcasts.txt` and the import settings now live in a separate folder, `AddOns\KalimdorZugZugRadio_Library` (shown in the AddOns list as *Kalimdor ZugZug Radio - My Music*), which addon updates, including the CurseForge app's, never touch.

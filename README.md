@@ -1,5 +1,14 @@
 <p align="center"><img src="docs/logo.svg" alt="Kalimdor ZugZug Radio" width="180"></p>
 
+<p align="center">
+  <a href="https://github.com/MikeAymeric/KalimdorZugZugRadio/releases/latest"><img src="https://img.shields.io/github/v/release/MikeAymeric/KalimdorZugZugRadio?label=version&color=ff7f00" alt="Latest version"></a>
+  <img src="https://img.shields.io/badge/WoW%20Forever-1.60.1%20(16001)-148eff" alt="WoW Forever 1.60.1, Interface 16001">
+  <a href="https://github.com/MikeAymeric/KalimdorZugZugRadio/releases"><img src="https://img.shields.io/github/downloads/MikeAymeric/KalimdorZugZugRadio/total?label=downloads" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/languages-12-2ea44f" alt="12 languages">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/MikeAymeric/KalimdorZugZugRadio" alt="MIT license"></a>
+  <a href="https://github.com/MikeAymeric/KalimdorZugZugRadio/commits/main"><img src="https://img.shields.io/github/last-commit/MikeAymeric/KalimdorZugZugRadio" alt="Last commit"></a>
+</p>
+
 # Kalimdor ZugZug Radio
 
 A music radio addon for **World of Warcraft Forever**.
@@ -8,9 +17,11 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 
 ## Features
 
-- **Conditional music**: 16 conditions (boss, elite, combat, flight, campfire, zone, night and more), each with its own playlist and volume.
-- **Your music library**: your own files (mp3, ogg, mp4, m4a, flac, wav...) with covers, organized in playlists created in-game.
-- **Game soundtrack**: about 600 WoW Forever and classic tracks, ready to use, with an in-game icon as the cover.
+- **Conditional music**: 16 conditions (boss, elite, combat, flight, campfire, zone, night and more), each with its own playlist and volume, plus playlists for specific zones, dungeons and bosses. Fight music fades out gently after the fight, and every fight starts a new song.
+- **Your music library**: your own files (mp3, ogg, mp4, m4a, flac, wav...) with covers, organized in playlists created in-game, browsable by album, artist and genre.
+- **Smart playlists** that fill themselves by rules (artist, genre, year, plays, favourites...), a **play-next queue** and a **smart shuffle** that plays skipped tracks less often.
+- **Game soundtrack**: about 600 WoW Forever and classic tracks, ready to use, with an in-game icon as the cover, and ready-made playlists for each condition.
+- **Welcome guide**: sets everything up in a minute the first time you log in.
 - **Podcasts**: the latest episodes of your favourite podcasts, resumed where you left off.
 - **Player**: cover, title, remaining time, controls, volume, favourites, a compact mode and a classic WoW look.
 - **Comfort**: key bindings, minimap button, "Now playing" banner, pause when AFK, lower music during cinematics, per-character profiles.
@@ -39,6 +50,8 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 4. Start the game. In the character selection screen open **AddOns** and make sure **Kalimdor ZugZug Radio** is enabled.
 
 In game, the player window appears and a drum button is added to the minimap. Type `/kzz` to show or hide the player.
+
+The first time, a **welcome guide** opens: it lets you choose the language and the music source, and creates ready-made playlists of the game soundtrack for the conditions you tick. Open it again with the *Tutorial* button in the settings or `/kzz tutorial`.
 
 You can already listen to the game soundtrack: open the library (the **Library** button on the player), select **WoW music** and press **>** on a track.
 
@@ -71,6 +84,7 @@ What the script does:
 - **Covers**: the cover embedded in each file is used, or a `cover.jpg` / `folder.jpg` in the folder. Identical covers are stored only once. An original whose cover can't be extracted is not deleted. At the end the script lists the folders whose tracks have no cover.
 - **Your music library**: if you keep your music in another folder (for example a Plex or iTunes library), choose it with option 1 of the menu, or pass `--library "D:\path\to\library"`. The script compares it with the `music` folder, lists the tracks that are missing and, after you confirm, copies and converts them. The folder is remembered for the next time and is only read. It only adds: a track you delete from `music` but keep in the library is copied again next time. Missing covers are also recovered from it.
 - **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, run `python tools\import_music.py --covers-from "D:\path\to\originals"`. That folder is only read.
+- **Tags**: title, artist, album, genre, year, composer and track numbers are read from each file. Many store-bought MP4 files keep the genre in a way ffmpeg misreads (a game soundtrack shows up as "Big Band"): the script reads the right genre from the file itself, and for tracks converted by an older version from the originals in your music library (option 1).
 - **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Use `--keep-names` to disable this.
 - **Where things go**: the music, `covers`, `Library.lua`, `podcasts.txt` and the script's settings are all in `AddOns\KalimdorZugZugRadio_Library`, a small data addon created by the script, so that addon updates never delete them.
 - Run the script again every time you add or remove music.
@@ -100,7 +114,9 @@ Spotify-exclusive podcasts have no RSS feed and can't be downloaded.
 - **|<  >  >|**: previous, play/stop, next. WoW can't pause a track: stop and play restart it from the beginning.
 - **Shuffle**, and the **volume** slider under the cover (it is the game's Music volume).
 - The **star** next to the title adds the track to your favourites.
-- The **dropdown** on the left chooses between *Automatic (conditions)* and a playlist to listen to freely.
+- The **dropdown** on the left chooses between *Automatic (conditions)* and a playlist to listen to freely. It also has:
+  - **Assign here**: give the playing playlist to the zone you are in, or to the current dungeon and its boss, with one click (or pick another playlist from its submenu);
+  - **Up next**: the tracks you queued; click one to take it out, or clear the queue.
 - The **minimize** button turns the player into a small bar; the button on the bar brings it back.
 
 ### Automatic music and free play
@@ -113,15 +129,20 @@ Spotify-exclusive podcasts have no RSS feed and can't be downloaded.
 Open it with the **Library** button, with `/kzz lib`, or by right-clicking the minimap button.
 
 - **Playlists** (left): create, rename, delete, export and import. The virtual playlists are always there: *Whole library*, *WoW music*, *Podcasts*, *Favourites*, *Recently played*, *Most played*.
-- **Tracks** (right): select one of your playlists and tick the tracks to include. The search filters by title, artist, album or folder; *Add visible* adds every track in the list. The *Source* menu shows your music, podcasts or the game music.
-- **>** or a double-click plays a track. The **star** adds it to your favourites. **Right-click** a track for *Never play this track* (it is skipped unless you choose it yourself).
+- **Tracks** (right): select one of your playlists and tick the tracks to include. The search filters by title, artist, album, folder, genre or composer; *Add visible* adds every track in the list. The *Source* menu shows your music, podcasts or the game music.
+- **Tracks / Albums / Artists / Genres**: the buttons above the list switch view. Click an album, artist or genre to see its tracks (*< Back* returns to the list), press **>** or *Play* to listen to all of it. With one of your playlists selected, *Add visible* inside an album adds the whole album.
+- **>** or a double-click plays a track. The **star** adds it to your favourites. **Right-click** a track for *Play next*, *Add to queue* and *Never play this track* (it is skipped unless you choose it yourself). Right-click an album for *Play next* and *Add to queue*.
+- **Smart playlists** (shown in blue): *New smart* opens the rules editor. Give it a name, choose *Match all the rules* or *Match any rule*, and add up to 6 rules: title, artist, album, genre, composer, year, folder, source, plays, length, favourite, never played. The editor shows how many tracks match. The playlist updates by itself as you listen and import music, and can be assigned to conditions like any other. *Edit rules* changes the selected one.
 - **Export / Import**: share a playlist as text. Game music works for everyone; your own files only if the other player has the same files.
 
 ### Settings
 
 *Options > AddOns > Kalimdor ZugZug Radio*, or `/kzz config`, or Ctrl-click on the minimap button.
 
-- **General**: radio on/off, shuffle, classic style, fade between conditions, minimap button, lock the player, "Now playing" banner, pause when AFK, lower the music in cinematics and dialogues, compact player, **profile** and **language**.
+- **General**: radio on/off, shuffle, classic style, fade between conditions, minimap button, lock the player, "Now playing" banner, pause when AFK, lower the music in cinematics and dialogues, compact player, **profile** and **language**, and the *Tutorial* button.
+- **Smart shuffle** (on by default): tracks you skip early and the ones you just heard come up less often, tracks you have never heard more often. No track is ever left out.
+- **Music after a fight**: how long the fight music keeps playing, slowly fading out, before the next condition (4 to 10 seconds; 4 after a boss). If you start another fight meanwhile, the song goes on. Every new fight starts a different song.
+- **Zone music between tracks** (off by default): in calm conditions (no condition, zone, city, night, mounted) the game's own zone music plays every few tracks for a few minutes. Some areas have long silences or no zone music.
 - **Conditions**: tick the ones you want and choose a playlist for each. The first active condition from the top wins:
 
   | Priority | Condition | When |
@@ -136,7 +157,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
   | 8 | Fishing | While fishing (and between casts) |
   | 9 | Swimming | In the water |
   | 10 | Campfire | Sitting at a campfire, until you move |
-  | 11 | Dungeon | Inside a dungeon or raid |
+  | 11 | Dungeon | Inside a dungeon or raid. *Specific dungeons* lets you give a dungeon its own playlist |
   | 12 | Mounted (ground) | On a ground mount |
   | 13 | Zone music | In a zone that has its own playlist (assign it while you are in the zone) |
   | 14 | City / Resting | In a city or an inn |
@@ -163,6 +184,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 | `/kzz` | Show or hide the player |
 | `/kzz lib` | Open the library |
 | `/kzz config` | Open the settings |
+| `/kzz tutorial` | Open the welcome guide again |
 | `/kzz play`, `stop`, `next`, `prev`, `shuffle` | Player controls |
 | `/kzz auto` | Back to automatic music |
 | `/kzz playlist <name>` | Play a playlist freely (`all`, `wow`, `podcast` also work) |
@@ -178,6 +200,8 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 - **No sound**: check that *Music* is enabled and not at zero in the game's sound options. The radio uses the Music channel.
 - **The conditions don't change the music**: the player is probably in *Free play* (shown in orange). Choose *Automatic (conditions)* in the player's dropdown or type `/kzz auto`.
 - **New tracks or episodes don't appear**: run the import script again and restart the game client (not just `/reload`).
+- **Your music disappeared after updating from 0.7 or older**: your playlists are safe (the game keeps them in `WTF`). Run **Import music.py** again on the same files, for example choosing your music library with option 1: the tracks get the same ids back and reappear in your playlists. The addon tells you at login when playlists refer to missing tracks.
+- **Genres look wrong** ("Big Band", "Porn Groove" on a soundtrack): run Import music.py again with your music library set (option 1); the right genre is read from the original files.
 - **A song restarts from the beginning after a fight or after dying**: WoW can't resume a song halfway. Podcasts resume from their current part.
 - **Japanese, Chinese or Korean titles**: they use fonts bundled with the addon (KZZR Sans, and Nanum Gothic for Korean), so they are readable on any client. So are symbols the game font lacks: arrows, stars, hearts, dingbats like ✿ ☀ ⚡ ✨, Greek letters, fullwidth punctuation. Emoji outside the basic plane (😂 🔥) are not supported.
 - **Something looks broken**: type `/kzz debug`, then `/reload`, and include the output when you report the problem.
