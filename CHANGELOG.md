@@ -6,6 +6,7 @@
 - **Updating from 0.7 or older: back up `AddOns\KalimdorZugZugRadio\music` and `covers` before updating**, because the old layout kept them inside the addon folder. Then run Import music.py once: it moves everything to the new folder. Your playlists keep working.
 - Files dropped into the old `KalimdorZugZugRadio\music` folder are moved to the new one by the import.
 - Import menu: option 7 opens your music folder.
+- The button that shrinks the player to the compact player shows a dash instead of an X.
 
 ## 0.7.1
 

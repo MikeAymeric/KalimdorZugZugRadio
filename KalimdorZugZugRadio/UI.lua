@@ -132,11 +132,22 @@ function UI:Build()
   f.fav:SetScript("OnLeave", ns.HideTooltip)
 
   -- minimize to the compact player
-  f.mini = CreateFrame("Button", nil, f)
-  f.mini:SetSize(24, 24)
-  f.mini:SetNormalTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
-  f.mini:SetPushedTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Down")
-  f.mini:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight", "ADD")
+  -- (the old UI-Panel-MinimizeButton texture shows an X on this client, like the close button):
+  -- the modern red "condense" button that matches the close button, or a button with a dash
+  local function hasAtlas(name)
+    return C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) ~= nil
+  end
+  local atlas = hasAtlas("RedButton-Condense")
+  f.mini = CreateFrame("Button", nil, f, not atlas and "UIPanelButtonTemplate" or nil)
+  if atlas and f.mini.SetNormalAtlas then
+    f.mini:SetSize(24, 24)
+    f.mini:SetNormalAtlas("RedButton-Condense")
+    if hasAtlas("RedButton-Condense-Pressed") then f.mini:SetPushedAtlas("RedButton-Condense-Pressed") end
+    if hasAtlas("RedButton-Highlight") then f.mini:SetHighlightAtlas("RedButton-Highlight", "ADD") end
+  else
+    f.mini:SetSize(20, 18)
+    f.mini:SetText("-")
+  end
   f.mini:SetScript("OnClick", function() UI:SetCompact(true) end)
   f.mini:SetScript("OnEnter", function(self) ns.ShowTooltip(self, "ANCHOR_TOP", { L.TT_COMPACT }) end)
   f.mini:SetScript("OnLeave", ns.HideTooltip)
