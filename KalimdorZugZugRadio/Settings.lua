@@ -48,7 +48,7 @@ end
 ---------------------------------------------------------------------------
 -- Content (inside a scroll frame: with 16 conditions it's taller than the Options canvas)
 ---------------------------------------------------------------------------
-local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 736
+local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 762
 local ROWS_PER_COLUMN = 8
 
 local function playlistMenu(root, isSelected, select, noneLabel)
@@ -108,10 +108,24 @@ local function build(p)
     ns.db.smartShuffle = on
     ns.Player:SetShuffle(ns.db.shuffle) -- rebuild the queues with the new order
   end, nil, L.TT_SMART_SHUFFLE)
+  p.optZoneBreaks = checkOption(c, L.OPT_ZONE_BREAKS, 330, -214, function(on)
+    ns.db.zoneBreaks = on
+    if not on then ns.Player:EndZoneBreak() ns.Rules:Evaluate(true) end
+  end, nil, L.TT_ZONE_BREAKS)
+  -- how often and how long: a few presets
+  local BREAKS = { { 2, 1 }, { 3, 2 }, { 5, 3 }, { 8, 5 } }
+  p.zoneBreakFreq = ns.MakeDropdown(c, 230, L.ZONE_BREAK_FREQ:format(3, 2), function(_, root)
+    for _, b in ipairs(BREAKS) do
+      ns.StyleMenuItem(root:CreateRadio(L.ZONE_BREAK_FREQ:format(b[1], b[2]),
+        function() return ns.db.zoneBreakEvery == b[1] and ns.db.zoneBreakMinutes == b[2] end,
+        function() ns.db.zoneBreakEvery, ns.db.zoneBreakMinutes = b[1], b[2] end))
+    end
+  end)
+  if p.zoneBreakFreq then p.zoneBreakFreq:SetPoint("TOPLEFT", 358, -238) end
 
   -- profile: the condition settings below belong to it
   local profLabel = text(c, "GameFontNormal")
-  profLabel:SetPoint("TOPLEFT", 20, -252)
+  profLabel:SetPoint("TOPLEFT", 20, -278)
   profLabel:SetText(L.PROFILE)
   p.profile = ns.MakeDropdown(c, 220, L.PROFILE_DEFAULT, function(_, root)
     for _, name in ipairs(ns.ProfileNames()) do
@@ -131,7 +145,7 @@ local function build(p)
 
   -- how long the fight music lasts (fading out) after the combat
   local tailLabel = text(c, "GameFontNormal")
-  tailLabel:SetPoint("TOPLEFT", 334, -252)
+  tailLabel:SetPoint("TOPLEFT", 334, -278)
   tailLabel:SetText(L.OPT_FIGHT_TAIL)
   p.fightTail = ns.MakeDropdown(c, 80, L.FIGHT_TAIL_SECONDS:format(8), function(_, root)
     for _, sec in ipairs({ 4, 6, 8, 10 }) do
@@ -151,7 +165,7 @@ local function build(p)
   end
 
   local langLabel = text(c, "GameFontNormal")
-  langLabel:SetPoint("TOPLEFT", 20, -288)
+  langLabel:SetPoint("TOPLEFT", 20, -314)
   langLabel:SetText(L.LANGUAGE)
   -- CJK language names always use a bundled font, so they are readable on any client
   p.lang = ns.MakeDropdown(c, 200, L.LANG_AUTO, function(_, root)
@@ -169,21 +183,21 @@ local function build(p)
   p.reload = ns.MakeButton(c, L.RELOAD, 130, function() ReloadUI() end)
   p.reload:SetPoint("LEFT", p.lang or langLabel, "RIGHT", 12, 0)
   p.langHint = text(c, "GameFontDisableSmall")
-  p.langHint:SetPoint("TOPLEFT", 20, -312)
+  p.langHint:SetPoint("TOPLEFT", 20, -338)
   p.langHint:SetText(L.LANG_RELOAD_HINT)
 
   -- Conditions ---------------------------------------------------------------
-  sectionHeader(c, L.CONDITIONS, -342)
+  sectionHeader(c, L.CONDITIONS, -368)
   -- free play warning: while a playlist is chosen manually, conditions are ignored
   p.freeBack = ns.MakeButton(c, L.BACK_AUTO, 150, function() ns.SetMode("auto") S:Refresh() end, L.TT_BACK_AUTO)
-  p.freeBack:SetPoint("TOPRIGHT", -16, -366)
+  p.freeBack:SetPoint("TOPRIGHT", -16, -392)
   p.freeWarn = text(c, "GameFontNormal")
-  p.freeWarn:SetPoint("TOPLEFT", 16, -370)
+  p.freeWarn:SetPoint("TOPLEFT", 16, -396)
   p.freeWarn:SetPoint("RIGHT", p.freeBack, "LEFT", -10, 0)
   p.freeWarn:SetJustifyH("LEFT")
   p.freeWarn:SetTextColor(1, 0.6, 0.1)
   local hint = text(c, "GameFontHighlightSmall")
-  hint:SetPoint("TOPLEFT", 16, -398)
+  hint:SetPoint("TOPLEFT", 16, -424)
   hint:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   hint:SetJustifyH("LEFT")
   hint:SetText(L.COND_SETTINGS_HINT)
@@ -192,7 +206,7 @@ local function build(p)
   p.conditions = {}
   for i, s in ipairs(ns.SITUATIONS) do
     local col = math.floor((i - 1) / ROWS_PER_COLUMN)
-    local y = -426 - ((i - 1) % ROWS_PER_COLUMN) * 34
+    local y = -452 - ((i - 1) % ROWS_PER_COLUMN) * 34
     local x = 16 + col * 316
     local row = {}
     row.check = checkOption(c, ns.SituationLabel(s.key), x, y, function(on) ns.SetConditionEnabled(s.key, on) end,
@@ -224,7 +238,7 @@ local function build(p)
   end
 
   p.zoneLine = text(c, "GameFontHighlightSmall")
-  p.zoneLine:SetPoint("TOPLEFT", 20, -426 - ROWS_PER_COLUMN * 34 - 6)
+  p.zoneLine:SetPoint("TOPLEFT", 20, -452 - ROWS_PER_COLUMN * 34 - 6)
   p.zoneLine:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   p.zoneLine:SetJustifyH("LEFT")
 
@@ -267,7 +281,7 @@ function S:RefreshMenus()
   for _, row in ipairs(panel.conditions) do
     if row.dropdown and row.dropdown.GenerateMenu then row.dropdown:GenerateMenu() end
   end
-  for _, dd in ipairs({ panel.lang, panel.profile, panel.fightTail }) do
+  for _, dd in ipairs({ panel.lang, panel.profile, panel.fightTail, panel.zoneBreakFreq }) do
     if dd and dd.GenerateMenu then dd:GenerateMenu() end
   end
 end
@@ -277,6 +291,7 @@ function S:Refresh()
   panel.optEnabled:SetChecked(ns.db.enabled)
   panel.optShuffle:SetChecked(ns.db.shuffle)
   panel.optSmartShuffle:SetChecked(ns.db.smartShuffle)
+  panel.optZoneBreaks:SetChecked(ns.db.zoneBreaks)
   panel.optMinimap:SetChecked(not ns.db.minimap.hide)
   panel.optLock:SetChecked(ns.db.ui.locked)
   panel.optClassic:SetChecked((ns.db.ui.skin or "classic") == "classic")

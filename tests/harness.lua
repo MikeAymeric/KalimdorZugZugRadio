@@ -666,6 +666,45 @@ do
   ns.DeletePlaylist("RFC"); ns.DeletePlaylist("Dgn"); advance(5)
 end
 
+-- 1.0: zone-music breaks (option, off by default)
+do
+  local P = ns.Player
+  check("zone breaks are off by default", ns.db.zoneBreaks == false)
+  ns.db.zoneBreaks = true; ns.db.zoneBreakEvery = 2; ns.db.zoneBreakMinutes = 1
+  ns.SetMode("auto"); advance(5)
+  check("calm condition for the break test", P.CALM[ns.Rules.current] == true)
+  P.sinceBreak = 0; P:Play(); advance(10.6)
+  check("first track ended: next one plays", playing ~= nil and not P:InZoneBreak())
+  advance(10.6)
+  check("every 2 tracks: the zone music plays", P:InZoneBreak() and playing == nil)
+  check("the player shows the break", KalimdorZugZugRadioFrame.title:GetText() == ns.L.ZONE_BREAK_TITLE)
+  advance(30)
+  check("the rules don't restart the music during the break", P:InZoneBreak() and playing == nil)
+  advance(31)
+  check("after 1 min our music comes back", not P:InZoneBreak() and playing ~= nil)
+  ns.CreatePlaylist("BreakFight"); ns.SetInPlaylist("BreakFight", "music\\c.mp3", true); ns.Assign("combat", "BreakFight")
+  advance(1)
+  P.sinceBreak = 1; P:Play(); advance(10.6)
+  check("break again", P:InZoneBreak())
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("a fight ends the break at once", not P:InZoneBreak() and playing ~= nil and ns.Rules.current == "combat")
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+  P.sinceBreak = 1; P:Play(); advance(10.6)
+  P:Toggle()
+  check("Play ends the break", not P:InZoneBreak() and P.playing)
+  P.sinceBreak = 1; P:Play(); advance(10.6)
+  ns.SetMode(ns.ALL); advance(1)
+  check("choosing a playlist ends the break", not P:InZoneBreak() and P.playing)
+  advance(30)
+  check("no breaks in free play", P.playing)
+  ns.SetMode("auto"); advance(5)
+  P.sinceBreak = 1; P:Play(); advance(10.6)
+  ns.db.zoneBreaks = false; P:EndZoneBreak(); ns.Rules:Evaluate(true); advance(1)
+  check("turning the option off brings the music back", not P:InZoneBreak() and P.playing)
+  ns.db.zoneBreakEvery, ns.db.zoneBreakMinutes = 3, 2
+  ns.DeletePlaylist("BreakFight"); advance(5)
+end
+
 -- key bindings
 check("binding names defined", BINDING_HEADER_KZZR == "Kalimdor ZugZug Radio" and BINDING_NAME_KZZR_PLAY ~= nil)
 local v0 = ns.Player:GetVolume(); KZZR_Binding("voldown")

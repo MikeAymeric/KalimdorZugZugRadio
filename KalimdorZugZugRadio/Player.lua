@@ -116,6 +116,7 @@ local function startTrack()
       timer = nil
       -- the track ended while the music fades out after a fight: move on at once
       if ns.Rules and ns.Rules.TrackEnded and ns.Rules:TrackEnded() then return end
+      if P:MaybeZoneBreak() then return end
       P:Next(true)
     end)
   end
@@ -139,6 +140,7 @@ end
 function P:Play(name)
   name = name or self.playlist
   if not playable(name) or not ns.db.enabled then return false end
+  self:EndZoneBreak()
   self.playlist = name
   self.userStopped = false
   self.afkPaused = false
@@ -183,6 +185,7 @@ function P:SetPlaylist(name, fresh)
     return
   end
   if name == self.playlist and self.playing then return end
+  if ns.db.mode ~= "auto" then self:EndZoneBreak() end -- the user picked a playlist
   if fresh then freshTrack(name) end
   self.playlist = name
   if self:IsHeld() or not ns.db.enabled then
@@ -344,9 +347,58 @@ function P:CancelFadeOut()
   if V.fade < 1 or tweens.fade then tween("fade", 1, nil, 1) end
 end
 
--- True when the music must stay silent: stopped by the user, or paused while AFK.
+-- True when the music must stay silent: stopped by the user, paused while AFK, or during a
+-- zone-music break.
 function P:IsHeld()
-  return self.userStopped or self.afkPaused or false
+  return self.userStopped or self.afkPaused or self.zoneBreakUntil ~= nil
+end
+
+---------------------------------------------------------------------------
+-- Zone-music breaks (option, off by default): in calm conditions, every N tracks the game's
+-- own zone music plays for M minutes (StopMusic gives it back). A more important condition,
+-- Play, Next or a playlist choice end the break at once.
+---------------------------------------------------------------------------
+local CALM = { idle = true, zone = true, town = true, night = true, mounted = true }
+P.CALM = CALM
+local breakTimer
+P.sinceBreak = 0
+
+function P:InZoneBreak() return self.zoneBreakUntil ~= nil end
+
+function P:EndZoneBreak()
+  if breakTimer then breakTimer:Cancel() breakTimer = nil end
+  if self.zoneBreakUntil then
+    self.zoneBreakUntil = nil
+    ns.Fire("STATE_CHANGED")
+  end
+end
+
+-- Called when a track ends by itself: true if a break starts instead of the next track.
+function P:MaybeZoneBreak()
+  local t = self.track
+  if not ns.db.zoneBreaks or ns.db.mode ~= "auto" or not CALM[ns.Rules.current] or (t and t.parts) then
+    return false
+  end
+  self.sinceBreak = self.sinceBreak + 1
+  if self.sinceBreak < (tonumber(ns.db.zoneBreakEvery) or 3) then return false end
+  self.sinceBreak = 0
+  self:Stop()
+  local seconds = (tonumber(ns.db.zoneBreakMinutes) or 2) * 60
+  self.zoneBreakUntil = GetTime() + seconds
+  local from = self.playlist
+  breakTimer = C_Timer.NewTimer(seconds, function()
+    breakTimer = nil
+    self.zoneBreakUntil = nil
+    if ns.db.mode ~= "auto" or self:IsHeld() or not playable(self.playlist) then
+      ns.Fire("STATE_CHANGED")
+    elseif self.playlist == from then
+      self:Next(true)
+    else
+      self:Play() -- the condition changed during the break: its playlist resumes where it was
+    end
+  end)
+  ns.Fire("STATE_CHANGED")
+  return true
 end
 
 function P:Stop(byUser)

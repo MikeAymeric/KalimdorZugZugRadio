@@ -605,6 +605,15 @@ end
 
 function UI:RefreshProgress()
   local P = ns.Player
+  if P:InZoneBreak() then -- time left before our music comes back
+    local total = (tonumber(ns.db.zoneBreakMinutes) or 2) * 60
+    local left = math.max(0, P.zoneBreakUntil - GetTime())
+    f.bar:SetMinMaxValues(0, total)
+    f.bar:SetValue(total - left)
+    f.elapsed:SetText("")
+    f.remaining:SetText("-" .. ns.FormatTime(left))
+    return
+  end
   local dur = P.track and tonumber(P.track.duration) or 0
   local el = math.min(P:Elapsed(), dur > 0 and dur or math.huge)
   f.bar:SetMinMaxValues(0, dur > 0 and dur or 1)
@@ -623,7 +632,12 @@ function UI:Refresh()
   local P = ns.Player
   local track = P.track
 
-  if track then
+  if P:InZoneBreak() then
+    ns.SetText(f.title, L.ZONE_BREAK_TITLE, "GameFontHighlightLarge")
+    ns.SetText(f.artist, L.ZONE_BREAK_HINT, "GameFontHighlightSmall")
+    f.artist:SetTextColor(0.75, 0.75, 0.75)
+    f.cover:SetTexture(DEFAULT_COVER)
+  elseif track then
     ns.SetText(f.title, track.title or "?", "GameFontHighlightLarge")
     local sub = track.artist or ""
     if track.album and track.album ~= "" then
@@ -761,8 +775,13 @@ function UI:RefreshCompact()
   if not c then return end
   local P = ns.Player
   local t = P.track
-  c.cover:SetTexture(ns.CoverOf(t) or DEFAULT_COVER)
-  ns.SetText(c.title, t and ns.TrackLabel(t) or L.NO_TRACK, "GameFontHighlightSmall")
+  if P:InZoneBreak() then
+    c.cover:SetTexture(DEFAULT_COVER)
+    ns.SetText(c.title, L.ZONE_BREAK_TITLE, "GameFontHighlightSmall")
+  else
+    c.cover:SetTexture(ns.CoverOf(t) or DEFAULT_COVER)
+    ns.SetText(c.title, t and ns.TrackLabel(t) or L.NO_TRACK, "GameFontHighlightSmall")
+  end
   c.play:SetText(P.playing and "||" or ">")
 end
 

@@ -172,6 +172,8 @@ end
 
 function R:Apply(key, playlist)
   cancelPending()
+  -- a zone-music break only lasts while the conditions stay calm
+  if ns.Player:InZoneBreak() and not ns.Player.CALM[key] then ns.Player:EndZoneBreak() end
   -- every fight starts with a new track; a fight that goes on keeps its song
   local fresh = FIGHT[key] and key ~= self.current
   self.current = key
