@@ -63,6 +63,67 @@ function ns.MakeDropdown(parent, width, defaultText, generator)
   return dd
 end
 
+-- Radio list of every playlist plus "none" (noneLabel, default L.NONE), for assignments.
+function ns.PlaylistMenu(root, isSelected, select, noneLabel)
+  ns.StyleMenuItem(root:CreateRadio(noneLabel or L.NONE, function() return isSelected(nil) end, function() select(nil) end))
+  for _, name in ipairs(ns.AllPlaylistNames()) do
+    ns.StyleMenuItem(root:CreateRadio(("%s (%d)"):format(ns.PlaylistLabel(name), #ns.GetPlaylist(name).tracks),
+      function() return isSelected(name) end, function() select(name) end), ns.TextFont(name))
+  end
+end
+
+-- "Assign here": the zone, dungeon and boss the player is at right now, so the current playlist
+-- can be given to them without going through the settings.
+local function hereTargets()
+  local t, R = {}, ns.Rules
+  if R.dungeonID then
+    local id = R.dungeonID
+    t[#t + 1] = { label = L.ASSIGN_DUNGEON, name = ns.db.seenDungeons[id] or tostring(id), general = true,
+      get = function() return ns.db.dungeons[id] and ns.db.dungeons[id].playlist end,
+      set = function(pl) ns.AssignDungeon(id, pl) end }
+    local boss = R.encounterID or R.lastBossID
+    if boss then
+      t[#t + 1] = { label = L.ASSIGN_BOSS, name = ns.db.seenBosses[boss] or tostring(boss), general = true,
+        get = function() return ns.db.bosses[boss] and ns.db.bosses[boss].playlist end,
+        set = function(pl) ns.AssignBoss(boss, pl) end }
+    end
+  else
+    local zone = ns.CurrentZone()
+    if zone then
+      t[#t + 1] = { label = L.ASSIGN_ZONE, name = zone.name or tostring(zone.id),
+        get = function() return ns.db.zones[zone.id] and ns.db.zones[zone.id].playlist end,
+        set = function(pl) ns.Assign("zone", pl) end }
+    end
+  end
+  return t
+end
+
+local function assignHereMenu(root)
+  local targets = hereTargets()
+  if #targets == 0 then return end
+  root:CreateDivider()
+  ns.StyleMenuItem(root:CreateTitle(L.ASSIGN_HERE))
+  local current = ns.Player.playlist
+  if current and not ns.IsPlayable(current) then current = nil end
+  for _, tg in ipairs(targets) do
+    local assigned = tg.get()
+    local text = tg.label:format(tg.name) .. (assigned and ("  -  " .. ns.PlaylistLabel(assigned)) or "")
+    local entry = root:CreateButton(text)
+    ns.StyleMenuItem(entry, ns.TextFont(text))
+    local function set(pl)
+      tg.set(pl)
+      if pl then ns.Print("MSG_ASSIGNED_HERE", tg.name, ns.PlaylistLabel(pl))
+      else ns.Print("MSG_UNASSIGNED_HERE", tg.name) end
+    end
+    if current then
+      local label = L.ASSIGN_CURRENT:format(ns.PlaylistLabel(current))
+      ns.StyleMenuItem(entry:CreateButton(label, function() set(current) end), ns.TextFont(label))
+      entry:CreateDivider()
+    end
+    ns.PlaylistMenu(entry, function(name) return tg.get() == name end, set, tg.general and L.ASSIGN_GENERAL or nil)
+  end
+end
+
 local function setupDropdown()
   return ns.MakeDropdown(f, 140, L.PLAYLIST, function(_, root)
     ns.StyleMenuItem(root:CreateRadio(L.AUTO_CONDITIONS,
@@ -77,6 +138,7 @@ local function setupDropdown()
       ns.StyleMenuItem(radio, ns.TextFont(name))
       if count == 0 and radio.SetEnabled then radio:SetEnabled(false) end
     end
+    assignHereMenu(root)
     root:CreateDivider()
     ns.StyleMenuItem(root:CreateButton(L.MANAGE_LIBRARY, function() ns.LibraryUI:Toggle(true) end))
     ns.StyleMenuItem(root:CreateButton(L.MENU_SETTINGS, function() ns.Settings:Open() end))

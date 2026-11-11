@@ -74,6 +74,23 @@ local function isFishingSpell(spellID)
   return type(name) == "string" and name == fishing
 end
 
+-- The dungeon we are in (GetInstanceInfo's 8th value), remembered so a playlist can be
+-- assigned to it. Leaving it also forgets the last boss met there.
+local function updateDungeon()
+  local id, name
+  if state.dungeon and GetInstanceInfo then
+    local ok, n, _, _, _, _, _, _, i = pcall(GetInstanceInfo)
+    if ok and not ns.IsSecret(i) and type(i) == "number" then
+      id = i
+      name = (not ns.IsSecret(n) and type(n) == "string") and n or nil
+    end
+  end
+  if id ~= R.dungeonID then
+    R.dungeonID, R.lastBossID = id, nil
+    if id and name then ns.db.seenDungeons[id] = name end
+  end
+end
+
 local function updateWorld()
   state.taxi = ns.Safe(UnitOnTaxi, "player") == true
   state.resting = ns.Safe(IsResting) == true
@@ -85,6 +102,7 @@ local function updateWorld()
   state.swimming = ns.Safe(IsSwimming) == true
   -- ground mount: mounted, not on a taxi and not flying
   state.mounted = ns.Safe(IsMounted) == true and not state.taxi and ns.Safe(IsFlying) ~= true
+  updateDungeon()
   local hour = GetGameTime and ns.Safe(GetGameTime)
   state.night = type(hour) == "number" and (hour >= NIGHT_START or hour < NIGHT_END) or false
   if state.fishing and GetTime() > fishingUntil and not ns.Safe(UnitChannelInfo, "player") then
@@ -235,6 +253,7 @@ function R:Start()
     R.encounterID = ns.Safe(function() return encounterID end)
     local bossName = ns.Safe(function() return encounterName end)
     if type(R.encounterID) == "number" and type(bossName) == "string" then ns.db.seenBosses[R.encounterID] = bossName end
+    if type(R.encounterID) == "number" then R.lastBossID = R.encounterID end
   end)
   -- level up: the "levelup" playlist plays one track (a jingle), then the normal music comes back.
   -- The end is scheduled when the jingle actually starts (after a crossfade, if any);

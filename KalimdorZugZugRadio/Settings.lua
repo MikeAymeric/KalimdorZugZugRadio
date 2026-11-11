@@ -51,11 +51,24 @@ end
 local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 736
 local ROWS_PER_COLUMN = 8
 
-local function playlistMenu(root, isSelected, select)
-  ns.StyleMenuItem(root:CreateRadio(L.NONE, function() return isSelected(nil) end, function() select(nil) end))
-  for _, name in ipairs(ns.AllPlaylistNames()) do
-    ns.StyleMenuItem(root:CreateRadio(("%s (%d)"):format(ns.PlaylistLabel(name), #ns.GetPlaylist(name).tracks),
-      function() return isSelected(name) end, function() select(name) end), ns.TextFont(name))
+local function playlistMenu(root, isSelected, select, noneLabel)
+  ns.PlaylistMenu(root, isSelected, select, noneLabel)
+end
+
+-- Submenu with a playlist for each boss / dungeon met so far (seen: id -> name).
+local function specificMenu(root, title, emptyLabel, seen, assigned, assign)
+  local menu = root:CreateButton(title)
+  ns.StyleMenuItem(menu)
+  local ids = {}
+  for id in pairs(seen) do ids[#ids + 1] = id end
+  table.sort(ids, function(a, b) return seen[a] < seen[b] end)
+  if #ids == 0 then ns.StyleMenuItem(menu:CreateTitle(emptyLabel)) end
+  for _, id in ipairs(ids) do
+    local pl = assigned[id] and assigned[id].playlist
+    local entry = menu:CreateButton(seen[id] .. (pl and ("  -  " .. ns.PlaylistLabel(pl)) or ""))
+    ns.StyleMenuItem(entry, ns.TextFont(seen[id]))
+    playlistMenu(entry, function(name) return (assigned[id] and assigned[id].playlist) == name end,
+      function(name) assign(id, name) end, L.ASSIGN_GENERAL)
   end
 end
 
@@ -200,20 +213,9 @@ local function build(p)
           function() ns.SetConditionVolume(s.key, pct / 100) end))
       end
       if s.key == "boss" then
-        -- a playlist for each boss met so far
-        local bosses = root:CreateButton(L.BOSS_SPECIFIC)
-        ns.StyleMenuItem(bosses)
-        local ids = {}
-        for id in pairs(ns.db.seenBosses) do ids[#ids + 1] = id end
-        table.sort(ids, function(a, b) return ns.db.seenBosses[a] < ns.db.seenBosses[b] end)
-        if #ids == 0 then ns.StyleMenuItem(bosses:CreateTitle(L.BOSS_NONE_SEEN)) end
-        for _, id in ipairs(ids) do
-          local assigned = ns.db.bosses[id] and ns.db.bosses[id].playlist
-          local entry = bosses:CreateButton(ns.db.seenBosses[id] .. (assigned and ("  -  " .. ns.PlaylistLabel(assigned)) or ""))
-          ns.StyleMenuItem(entry, ns.TextFont(ns.db.seenBosses[id]))
-          playlistMenu(entry, function(name) return (ns.db.bosses[id] and ns.db.bosses[id].playlist) == name end,
-            function(name) ns.AssignBoss(id, name) end)
-        end
+        specificMenu(root, L.BOSS_SPECIFIC, L.BOSS_NONE_SEEN, ns.db.seenBosses, ns.db.bosses, ns.AssignBoss)
+      elseif s.key == "dungeon" then
+        specificMenu(root, L.DUNGEON_SPECIFIC, L.DUNGEON_NONE_SEEN, ns.db.seenDungeons, ns.db.dungeons, ns.AssignDungeon)
       end
     end)
     if row.dropdown then row.dropdown:SetPoint("TOPLEFT", x + 150, y + 2) end

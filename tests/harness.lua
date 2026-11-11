@@ -93,6 +93,7 @@ function InCombatLockdown() return G.combat end
 function UnitOnTaxi() return G.taxi end
 function IsResting() return G.resting end
 function IsInInstance() return G.instance ~= "none", G.instance end
+function GetInstanceInfo() return G.instanceName, G.instance, 1, "Normal", 5, 0, false, G.instanceID end
 function GetUnitSpeed() return G.speed end
 function UnitClassification() return G.class end
 function UnitCanAttack() return true end
@@ -605,6 +606,64 @@ do
   ns.db.smartShuffle = true
   ns.db.stats[c.file].skips = nil
   ns.SetMode("auto"); advance(5)
+end
+
+-- 1.0: dungeon-specific music and "Assign here" in the player's menu
+do
+  -- a fake Menu API root that records what the generator builds
+  local function node(text, fn, sel)
+    local n = { text = text, fn = fn, sel = sel, kids = {} }
+    function n:CreateButton(t, f) local c = node(t, f) table.insert(self.kids, c) return c end
+    function n:CreateRadio(t, s2, f) local c = node(t, f, s2) table.insert(self.kids, c) return c end
+    function n:CreateTitle(t) local c = node(t) c.title = true table.insert(self.kids, c) return c end
+    function n:CreateDivider() end
+    return n
+  end
+  local function find(n, pattern)
+    for _, k in ipairs(n.kids) do
+      if k.text and tostring(k.text):find(pattern, 1, true) then return k end
+    end
+  end
+  local function menu() local r = node() KalimdorZugZugRadioFrame.dropdown._gen(nil, r) return r end
+
+  ns.CreatePlaylist("RFC"); ns.SetInPlaylist("RFC", "music\\a.ogg", true)
+  ns.CreatePlaylist("Dgn"); ns.SetInPlaylist("Dgn", "music\\b.ogg", true)
+  ns.Assign("dungeon", "Dgn"); ns.SetMode("auto"); advance(5)
+  local r = menu()
+  check("open world: Assign here shows the zone", find(r, "Zone: Durotar") ~= nil and not find(r, "Dungeon:"))
+  G.instance = "party"; G.instanceName = "Ragefire Chasm"; G.instanceID = 389
+  fire("PLAYER_ENTERING_WORLD", false, false); advance(1)
+  check("dungeon remembered", ns.Rules.dungeonID == 389 and ns.db.seenDungeons[389] == "Ragefire Chasm")
+  check("generic dungeon playlist", ns.Player.playlist == "Dgn")
+  r = menu()
+  local d = find(r, "Dungeon: Ragefire Chasm")
+  check("in a dungeon: Assign here shows the dungeon, not the zone", d ~= nil and not find(r, "Zone:"))
+  ns.SetMode("RFC"); advance(1)
+  r = menu(); d = find(r, "Dungeon: Ragefire Chasm")
+  local use = find(d, "Use the current playlist")
+  check("one click offers the current playlist", use ~= nil and use.text:find("RFC", 1, true) ~= nil)
+  use.fn()
+  check("dungeon-specific playlist assigned", ns.db.dungeons[389] and ns.db.dungeons[389].playlist == "RFC")
+  ns.SetMode("auto"); advance(1)
+  check("dungeon-specific playlist wins over the generic one", ns.Player.playlist == "RFC")
+  G.combat = true; fire("ENCOUNTER_START", 1443, "Taragaman", 1, 5); fire("PLAYER_REGEN_DISABLED"); advance(1)
+  fire("ENCOUNTER_END", 1443); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+  r = menu()
+  local b = find(r, "Boss: Taragaman")
+  check("the last boss met is offered after the fight", b ~= nil)
+  find(b, "Dgn (").fn()
+  check("boss-specific playlist from the player's menu", ns.db.bosses[1443] and ns.db.bosses[1443].playlist == "Dgn")
+  find(find(menu(), "Dungeon: Ragefire"), "None (use the general one)").fn(); advance(1)
+  check("dungeon back to the generic playlist", ns.db.dungeons[389] == nil and ns.Player.playlist == "Dgn")
+  ns.AssignDungeon(389, "RFC")
+  ns.NewCharacterProfile()
+  check("new profile copies dungeon playlists", ns.db.dungeons[389] and ns.db.dungeons[389].playlist == "RFC")
+  ns.SetCharacterProfile(ns.DEFAULT_PROFILE)
+  G.instance = "none"; G.instanceName = nil; G.instanceID = nil
+  fire("PLAYER_ENTERING_WORLD", false, false); advance(5)
+  check("leaving the dungeon forgets it and its last boss", ns.Rules.dungeonID == nil and ns.Rules.lastBossID == nil)
+  ns.AssignBoss(1443, nil); ns.AssignDungeon(389, nil)
+  ns.DeletePlaylist("RFC"); ns.DeletePlaylist("Dgn"); advance(5)
 end
 
 -- key bindings

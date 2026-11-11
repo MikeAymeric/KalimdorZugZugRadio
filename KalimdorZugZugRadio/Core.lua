@@ -33,7 +33,8 @@ local DEFAULTS = {
   shuffle = true,
   playlists = {},  -- name -> { file, file, ... } (file = track id)
   -- per-character profiles: name -> { assign = {condition -> playlist}, disabled = {condition -> true},
-  -- zones = {mapID -> {playlist, name}} }. ns.db.assign/disabled/zones point to the active profile.
+  -- zones = {mapID -> {playlist, name}}, bosses/dungeons = {id -> {playlist, name}}, volumes }.
+  -- ns.db.assign/disabled/zones/bosses/dungeons/volumes point to the active profile.
   profiles = {},
   charProfiles = {}, -- "Name-Realm" -> profile name
   crossfade = true,  -- fade the music volume when the condition changes
@@ -48,6 +49,7 @@ local DEFAULTS = {
   stats = {},        -- track id -> { plays = n, seconds = s, skips = n }
   totalSeconds = 0,
   seenBosses = {},   -- encounterID -> boss name (to assign boss-specific music)
+  seenDungeons = {}, -- instanceID -> dungeon name (to assign dungeon-specific music)
   podcastProgress = {}, -- "ep:<key>" -> { part = n, done = true|nil, at = timestamp }
   lang = nil,      -- nil = client language
   ui = { shown = true, locked = false, skin = "classic", banner = true, compact = false }, -- skin: "classic" | "modern"
@@ -560,10 +562,10 @@ function ns.PlaylistFor(key)
   local name
   if key == "zone" then
     name = ns.ZonePlaylist()
-  elseif key == "boss" then
-    -- a playlist for this specific boss wins over the generic boss playlist
-    local id = ns.Rules.encounterID
-    local specific = id and ns.db.bosses[id]
+  elseif key == "boss" or key == "dungeon" then
+    -- a playlist for this specific boss / dungeon wins over the generic one
+    local id = key == "boss" and ns.Rules.encounterID or (key == "dungeon" and ns.Rules.dungeonID)
+    local specific = id and (key == "boss" and ns.db.bosses or ns.db.dungeons)[id]
     name = (specific and ns.IsPlayable(specific.playlist)) and specific.playlist or ns.db.assign[key]
   else
     name = ns.db.assign[key]
@@ -581,6 +583,13 @@ end
 -- Boss-specific music: encounterID -> { playlist, name }.
 function ns.AssignBoss(id, playlist)
   ns.db.bosses[id] = playlist and { playlist = playlist, name = ns.db.seenBosses[id] } or nil
+  ns.Fire("PLAYLISTS_CHANGED")
+  ns.Rules:Evaluate(true)
+end
+
+-- Dungeon-specific music: instanceID -> { playlist, name }.
+function ns.AssignDungeon(id, playlist)
+  ns.db.dungeons[id] = playlist and { playlist = playlist, name = ns.db.seenDungeons[id] } or nil
   ns.Fire("PLAYLISTS_CHANGED")
   ns.Rules:Evaluate(true)
 end
@@ -713,6 +722,7 @@ local function ensureProfile(name)
   prof.disabled = type(prof.disabled) == "table" and prof.disabled or {}
   prof.zones = type(prof.zones) == "table" and prof.zones or {}
   prof.bosses = type(prof.bosses) == "table" and prof.bosses or {}
+  prof.dungeons = type(prof.dungeons) == "table" and prof.dungeons or {}
   prof.volumes = type(prof.volumes) == "table" and prof.volumes or {}
   return prof
 end
@@ -722,7 +732,7 @@ function ns.ActivateProfile(name)
   local prof = ensureProfile(name)
   ns.profileName = name
   ns.db.assign, ns.db.disabled, ns.db.zones = prof.assign, prof.disabled, prof.zones
-  ns.db.bosses, ns.db.volumes = prof.bosses, prof.volumes
+  ns.db.bosses, ns.db.volumes, ns.db.dungeons = prof.bosses, prof.volumes, prof.dungeons
   ns.Fire("PLAYLISTS_CHANGED")
   if ns.Rules.started then ns.Rules:Evaluate(true) end
 end
@@ -749,11 +759,12 @@ end
 function ns.NewCharacterProfile()
   local char = ns.CharacterKey() or "Character"
   local src = ensureProfile(ns.profileName or ns.DEFAULT_PROFILE)
-  local copy = { assign = {}, disabled = {}, zones = {}, bosses = {}, volumes = {} }
+  local copy = { assign = {}, disabled = {}, zones = {}, bosses = {}, volumes = {}, dungeons = {} }
   for k, v in pairs(src.assign) do copy.assign[k] = v end
   for k, v in pairs(src.disabled) do copy.disabled[k] = v end
   for k, v in pairs(src.zones) do copy.zones[k] = { playlist = v.playlist, name = v.name } end
   for k, v in pairs(src.bosses) do copy.bosses[k] = { playlist = v.playlist, name = v.name } end
+  for k, v in pairs(src.dungeons) do copy.dungeons[k] = { playlist = v.playlist, name = v.name } end
   for k, v in pairs(src.volumes) do copy.volumes[k] = v end
   ns.db.profiles[char] = copy
   ns.SetCharacterProfile(char)
@@ -914,6 +925,9 @@ function ns.DebugLines()
     ("  Settings API: %s, category registered: %s, Minimap: %s"):format(
       s(Settings ~= nil and Settings.RegisterCanvasLayoutCategory ~= nil), s(ns.Settings and ns.Settings:HasCategory()),
       s(Minimap ~= nil)),
+    ("  conditions: current %s, zone %s, dungeon %s (%s), encounter %s, last boss %s"):format(
+      s(ns.Rules.current), s(ns.CurrentZone() and ns.CurrentZone().id), s(ns.Rules.dungeonID),
+      s(ns.Rules.dungeonID and ns.db.seenDungeons[ns.Rules.dungeonID]), s(ns.Rules.encounterID), s(ns.Rules.lastBossID)),
   }
   local ok, mm = pcall(ns.Minimap.DebugInfo, ns.Minimap)
   table.insert(lines, "  minimap: " .. (ok and mm or ("error: " .. tostring(mm))))
@@ -955,7 +969,7 @@ end)
 ns.RegisterEvent("PLAYER_LOGOUT", function()
   pcall(function() ns.db.lastPerf = ns.PerfReport() end)
   ns.Player:RestoreVolume()
-  ns.db.assign, ns.db.disabled, ns.db.zones, ns.db.bosses, ns.db.volumes = nil, nil, nil, nil, nil
+  ns.db.assign, ns.db.disabled, ns.db.zones, ns.db.bosses, ns.db.volumes, ns.db.dungeons = nil, nil, nil, nil, nil, nil
 end)
 
 ns.RegisterEvent("PLAYER_LOGIN", function()
