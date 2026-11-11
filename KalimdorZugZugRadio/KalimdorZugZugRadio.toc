@@ -11,12 +11,13 @@
 ## Notes-zhCN: 条件电台：为首领、战斗、飞行、营火等场景播放你的播放列表。/kzz
 ## Notes-zhTW: 條件電台：為首領、戰鬥、飛行、營火等情境播放你的播放清單。/kzz
 ## Notes-koKR: 조건부 라디오: 보스, 전투, 비행, 모닥불 등 상황에 맞춰 내 재생 목록을 재생합니다. /kzz
-## Version: 0.7.1
+## Version: 0.8.0
 ## Author: MikeAymeric
 ## Category: Audio & Video
 ## X-Website: https://github.com/MikeAymeric/KalimdorZugZugRadio
 ## X-License: MIT
 ## SavedVariables: KZZR_DB
+## OptionalDeps: KalimdorZugZugRadio_Library
 ## IconTexture: Interface\Icons\INV_Misc_Drum_01
 ## AddonCompartmentFunc: KZZR_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: KZZR_OnCompartmentEnter

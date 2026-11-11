@@ -42,13 +42,17 @@ In game, the player window appears and a drum button is added to the minimap. Ty
 
 You can already listen to the game soundtrack: open the library (the **Library** button on the player), select **WoW music** and press **>** on a track.
 
+**Updating**: your music, covers and podcasts live in a separate folder, `AddOns\KalimdorZugZugRadio_Library` (it appears in the AddOns list as *Kalimdor ZugZug Radio - My Music*: keep it enabled). Addon updates, including the CurseForge app's, never touch it. Your playlists and settings are saved by the game in `WTF` and are kept too.
+
+> Updating from 0.7 or older? There, your music was inside the addon folder, which an update can replace. **Back up `AddOns\KalimdorZugZugRadio\music` and `covers` before updating.** Then run **Import music.py** once: it moves everything to the new folder.
+
 ## Adding your own music
 
-1. Put your music files in the addon's `music` folder:
+1. Put your music files in your music folder:
    ```
-   World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio\music\
+   World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio_Library\music\
    ```
-   You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
+   The first time you run **Import music.py** it creates this folder (option 7 of its menu opens it). Files you put in the addon's own `KalimdorZugZugRadio\music` folder are moved there too. You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
 2. In the addon folder, double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/): tick "Add python.exe to PATH" when installing it). A window opens with a small menu: type the number of an option to change it (your music library, keep the originals, podcasts, recover covers...), then press Enter to start. The window shows the progress; press Enter to close it at the end. If double-clicking opens the file in an editor instead, use the terminal command below.
 
    You can also run the script from a terminal opened in the addon folder and pass the options directly (the menu then doesn't appear; `--help` lists them):
@@ -68,11 +72,12 @@ What the script does:
 - **Your music library**: if you keep your music in another folder (for example a Plex or iTunes library), choose it with option 1 of the menu, or pass `--library "D:\path\to\library"`. The script compares it with the `music` folder, lists the tracks that are missing and, after you confirm, copies and converts them. The folder is remembered for the next time and is only read. It only adds: a track you delete from `music` but keep in the library is copied again next time. Missing covers are also recovered from it.
 - **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, run `python tools\import_music.py --covers-from "D:\path\to\originals"`. That folder is only read.
 - **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Use `--keep-names` to disable this.
+- **Where things go**: the music, `covers`, `Library.lua`, `podcasts.txt` and the script's settings are all in `AddOns\KalimdorZugZugRadio_Library`, a small data addon created by the script, so that addon updates never delete them.
 - Run the script again every time you add or remove music.
 
 ## Podcasts
 
-1. Create a file named **`podcasts.txt`** in the addon folder (`...\AddOns\KalimdorZugZugRadio\podcasts.txt`), or run `python tools\import_music.py --podcasts` from the addon folder once to create a template.
+1. Create a file named **`podcasts.txt`** in your music library folder (`...\AddOns\KalimdorZugZugRadio_Library\podcasts.txt`), or turn on podcasts in the menu of **Import music.py** (or run `python tools\import_music.py --podcasts`) once to create a template.
 2. Add one podcast per line: the RSS feed address or the Apple Podcasts page link, followed by how many recent episodes to keep (3 if omitted):
    ```
    https://example.com/feed/my-podcast.xml 3

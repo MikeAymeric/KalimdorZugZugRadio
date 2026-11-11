@@ -1,11 +1,17 @@
 """Imports music (and podcasts) for Kalimdor ZugZug Radio.
 
-Recursively scans KalimdorZugZugRadio/music/ (subfolders are only for organizing:
+Your music lives in a separate folder next to the addon, AddOns/KalimdorZugZugRadio_Library/
+(a tiny data addon created by this script), so updating the addon (e.g. with the CurseForge
+app, which replaces the addon folder) never deletes it. Files dropped into the old
+KalimdorZugZugRadio/music/ folder are moved there.
+
+Recursively scans KalimdorZugZugRadio_Library/music/ (subfolders are only for organizing:
 playlists are created in-game), converts formats WoW can't play (mp4, m4a, flac,
 wav, ...) to OGG, extracts covers (embedded, or cover.jpg/folder.jpg in the folder)
-as deduplicated 256x256 PNGs and generates Library.lua.
+as deduplicated 256x256 PNGs and generates KalimdorZugZugRadio_Library/Library.lua.
 
 Usage:  python import_music.py [--addon FOLDER] [--keep-originals] [--keep-names] [--podcasts]
+        (with no options, in a window, it shows a menu; --help lists every option)
 The addon folder is found automatically: the folder you run the script from, then the
 addon installed in World of Warcraft on this PC (Windows registry and usual locations,
 WoW Forever first). If it isn't found, pass it with --addon "path/to/KalimdorZugZugRadio".
@@ -27,8 +33,9 @@ from datetime import datetime
 from pathlib import Path
 
 ADDON_NAME = "KalimdorZugZugRadio"
+DATA_ADDON_NAME = "KalimdorZugZugRadio_Library"  # the user's data, next to the addon (see the docstring)
 # Set by set_addon_dir() in main().
-ADDON_DIR = MUSIC_DIR = COVERS_DIR = LIBRARY_FILE = ORIGINALS_DIR = Path()
+ADDON_DIR = DATA_DIR = MUSIC_DIR = COVERS_DIR = LIBRARY_FILE = ORIGINALS_DIR = Path()
 
 
 FLAVOR_PREFERENCE = ["_forever_", "_retail_", "_classic_era_", "_classic_", "_anniversary_"]
@@ -120,12 +127,89 @@ def find_addon_dir(explicit: str | None) -> Path | None:
 
 
 def set_addon_dir(path: Path) -> None:
-    global ADDON_DIR, MUSIC_DIR, COVERS_DIR, LIBRARY_FILE, ORIGINALS_DIR
+    global ADDON_DIR, DATA_DIR, MUSIC_DIR, COVERS_DIR, LIBRARY_FILE, ORIGINALS_DIR
     ADDON_DIR = path
-    MUSIC_DIR = ADDON_DIR / "music"
-    COVERS_DIR = ADDON_DIR / "covers"
-    LIBRARY_FILE = ADDON_DIR / "Library.lua"
+    DATA_DIR = ADDON_DIR.parent / DATA_ADDON_NAME
+    MUSIC_DIR = DATA_DIR / "music"
+    COVERS_DIR = DATA_DIR / "covers"
+    LIBRARY_FILE = DATA_DIR / "Library.lua"
     ORIGINALS_DIR = MUSIC_DIR / "_originals"
+
+
+# --- Data addon -------------------------------------------------------------------
+# Until 0.7 everything lived inside the addon folder, which addon managers replace on update.
+# The data addon is a separate folder that no package contains, so updates never touch it.
+MOVED_ITEMS = ["music", "covers", "podcasts.txt", "podcast.txt", "import_settings.json"]
+MERGED_JSON = {"_original_names.json", "_index.json"}  # name maps: merged when both sides have one
+LEGACY_LIBRARY = """-- Kept for compatibility. Since 0.8 your music library is in the separate folder
+-- AddOns\\KalimdorZugZugRadio_Library (created by Import music.py), which addon updates never touch.
+KZZR_Library = KZZR_Library or { tracks = {} }
+"""
+
+
+def interface_version() -> str:
+    for line in (ADDON_DIR / f"{ADDON_NAME}.toc").read_text(encoding="utf-8-sig").splitlines():
+        if line.startswith("## Interface:"):
+            return line.split(":", 1)[1].strip()
+    return "16001"
+
+
+def ensure_data_addon() -> None:
+    """Creates KalimdorZugZugRadio_Library (folder, .toc, Library.lua) if missing."""
+    (DATA_DIR / "music").mkdir(parents=True, exist_ok=True)
+    toc = DATA_DIR / f"{DATA_ADDON_NAME}.toc"
+    text = (f"## Interface: {interface_version()}\n"
+            "## Title: Kalimdor ZugZug Radio - My Music\n"
+            "## Notes: Your music for Kalimdor ZugZug Radio, created by Import music.py. Keep it enabled. "
+            "Addon updates never touch this folder.\n"
+            "## IconTexture: Interface\\Icons\\INV_Misc_Drum_01\n"
+            "\nLibrary.lua\n")
+    if not toc.is_file() or toc.read_text(encoding="utf-8-sig") != text:
+        toc.write_text(text, encoding="utf-8")
+    if not LIBRARY_FILE.is_file():
+        write_library([])
+
+
+def move_merge(src: Path, dst: Path, stats: dict) -> None:
+    """Moves src to dst; folders are merged, never overwriting an existing file."""
+    if not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        stats["moved"] += 1
+    elif src.is_dir() and dst.is_dir():
+        for child in list(src.iterdir()):
+            move_merge(child, dst / child.name, stats)
+        try:
+            src.rmdir()
+        except OSError:
+            pass
+    elif src.name in MERGED_JSON:
+        merged = json.loads(src.read_text(encoding="utf-8"))
+        merged.update(json.loads(dst.read_text(encoding="utf-8")))
+        dst.write_text(json.dumps(merged, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
+        src.unlink()
+    elif src.is_file() and dst.is_file() and src.stat().st_size == dst.stat().st_size:
+        src.unlink()  # same file already moved
+    else:
+        stats["warnings"].append(f"{src}: not moved, {dst} already exists")
+
+
+def migrate_to_data_addon(stats: dict) -> None:
+    """Moves the user's files from the addon folder (layout <= 0.7, or files dropped into its music
+    folder) into the data addon. A rename on the same drive, so it is instant even for many GB."""
+    found = [ADDON_DIR / n for n in MOVED_ITEMS if (ADDON_DIR / n).exists()]
+    found = [f for f in found if not (f.is_dir() and not any(f.iterdir()))]
+    if not found:
+        return
+    print(f"Moving your files to {DATA_DIR} (addon updates never touch it):")
+    for src in found:
+        print(f"  {src.name}")
+        move_merge(src, DATA_DIR / src.name, stats)
+    (ADDON_DIR / "music").mkdir(exist_ok=True)  # stays as a drop folder
+    old_library = ADDON_DIR / "Library.lua"
+    if old_library.is_file() and old_library.read_text(encoding="utf-8") != LEGACY_LIBRARY:
+        old_library.write_text(LEGACY_LIBRARY, encoding="utf-8")
+    print()
 
 NATIVE = {".ogg", ".mp3"}
 CONVERT = {".mp4", ".m4a", ".aac", ".flac", ".wav", ".webm", ".opus", ".wma",
@@ -315,7 +399,7 @@ def lua_text(s: str) -> str:
 
 
 def wow_path(p: Path) -> str:
-    return str(p.relative_to(ADDON_DIR)).replace("/", "\\")
+    return str(p.relative_to(DATA_DIR)).replace("/", "\\")
 
 
 def folder_cover(folder: Path, root: Path | None = None) -> Path | None:
@@ -507,15 +591,15 @@ PODCASTS_FILE_NAMES = ("podcasts.txt", "podcast.txt")  # the singular is accepte
 
 def find_podcasts_file() -> Path | None:
     for name in PODCASTS_FILE_NAMES:
-        if (ADDON_DIR / name).is_file():
-            return ADDON_DIR / name
+        if (DATA_DIR / name).is_file():
+            return DATA_DIR / name
     return None
 
 
 def update_podcasts(stats: dict) -> None:
     podcasts_file = find_podcasts_file()
     if not podcasts_file:
-        podcasts_file = ADDON_DIR / PODCASTS_FILE_NAMES[0]
+        podcasts_file = DATA_DIR / PODCASTS_FILE_NAMES[0]
         podcasts_file.write_text(PODCASTS_TEMPLATE, encoding="utf-8")
         print(f"Created {podcasts_file}: add your podcasts and run the script again.\n")
         return
@@ -722,9 +806,10 @@ def recover_covers(tracks: list[dict], source_root: Path, stats: dict) -> int:
 
 def write_library(tracks: list[dict]) -> None:
     lines = [
-        "-- GENERATED by tools/import_music.py: do not edit by hand.",
-        "-- 'file' is also the track id used by the playlists saved in-game.",
-        "KZZR_Library = {",
+        "-- GENERATED by Import music.py (tools/import_music.py of Kalimdor ZugZug Radio): do not edit by hand.",
+        "-- 'file' is also the track id used by the playlists saved in-game; paths are relative to this folder.",
+        "KZZR_UserLibrary = {",
+        f'  addon = "{DATA_ADDON_NAME}",',
         f'  generated = "{datetime.now():%Y-%m-%d %H:%M}",',
         "  tracks = {",
     ]
@@ -751,7 +836,7 @@ AUDIO_EXT = NATIVE | CONVERT
 
 
 def load_settings() -> dict:
-    path = ADDON_DIR / SETTINGS_FILE_NAME
+    path = DATA_DIR / SETTINGS_FILE_NAME
     try:
         return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     except (OSError, ValueError):
@@ -759,7 +844,7 @@ def load_settings() -> dict:
 
 
 def save_settings(settings: dict) -> None:
-    (ADDON_DIR / SETTINGS_FILE_NAME).write_text(json.dumps(settings, ensure_ascii=False, indent=1),
+    (DATA_DIR / SETTINGS_FILE_NAME).write_text(json.dumps(settings, ensure_ascii=False, indent=1),
                                                 encoding="utf-8")
 
 
@@ -878,6 +963,7 @@ def interactive_menu(args: argparse.Namespace) -> bool:
         print(" Kalimdor ZugZug Radio - music import")
         print("=" * 72)
         print(f" Addon: {ADDON_DIR}")
+        print(f" Your music folder: {MUSIC_DIR}")
         print(f" Music: {music_summary()}\n")
         print(f"  1. Your music library, to copy what's missing      [{args.library or 'not set'}]")
         print(f"  2. Keep the original files after converting        [{yes_no(args.keep_originals)}]"
@@ -886,6 +972,7 @@ def interactive_menu(args: argparse.Namespace) -> bool:
         print(f"  4. Podcasts                                        [{podcasts}]")
         print(f"  5. Recover missing covers from a folder            [{covers}]")
         print("  6. Change the addon folder")
+        print("  7. Open your music folder (put your files there)")
         choice = ask("\n Type a number to change an option, Enter to start, Q to quit: ").lower()
         print()
         if choice == "":
@@ -929,10 +1016,20 @@ def interactive_menu(args: argparse.Namespace) -> bool:
         elif choice == "6":
             folder = ask_folder(f" Folder of the {ADDON_NAME} addon (type it or drag it here): ")
             found = _check_addon(folder.resolve()) if folder else None
-            if found and (found / MUSIC_DIR.name).is_dir():
+            if found:
                 set_addon_dir(found)
+                ensure_data_addon()
+                moved = {"moved": 0, "warnings": []}
+                migrate_to_data_addon(moved)
+                for w in moved["warnings"]:
+                    print(f"  WARNING: {w}")
             elif folder:
-                print(f" {ADDON_NAME}.toc and a music folder were not found in {folder}\n")
+                print(f" {ADDON_NAME}.toc was not found in {folder}\n")
+        elif choice == "7":
+            if hasattr(os, "startfile"):
+                os.startfile(MUSIC_DIR)  # noqa: S606 - opens Explorer on Windows
+            else:
+                print(f" Your music folder: {MUSIC_DIR}\n")
         else:
             print(f" Unknown choice: {choice}\n")
 
@@ -974,8 +1071,10 @@ def main() -> None:
                  f"World of Warcraft/_forever_/Interface/AddOns/ first, or pass its folder with "
                  f"--addon \"path\\{ADDON_NAME}\"")
     set_addon_dir(addon)
-    if not MUSIC_DIR.is_dir():
-        sys.exit(f"ERROR: folder {MUSIC_DIR} not found")
+    stats = {"converted": 0, "renamed": 0, "deleted": 0, "copied": 0, "moved": 0, "podcast_new": 0,
+             "podcast_removed": 0, "warnings": []}
+    ensure_data_addon()
+    migrate_to_data_addon(stats)
     # migration from the Italian file/folder names used by versions <= 0.4
     legacy_names = MUSIC_DIR / LEGACY_NAMES_FILE_NAME
     if legacy_names.exists() and not (MUSIC_DIR / NAMES_FILE_NAME).exists():
@@ -1010,14 +1109,12 @@ def main() -> None:
     print(f"Addon: {ADDON_DIR}\n")
     COVERS_DIR.mkdir(exist_ok=True)
 
-    stats = {"converted": 0, "renamed": 0, "deleted": 0, "copied": 0, "podcast_new": 0, "podcast_removed": 0,
-             "warnings": []}
     # podcasts: always checked when podcasts.txt exists (unless --no-podcasts); --podcasts creates the template
     do_podcasts = not args.no_podcasts and (args.podcasts or find_podcasts_file() is not None)
     if do_podcasts:
         update_podcasts(stats)
     if not args.keep_originals and ORIGINALS_DIR.is_dir():
-        print(f"  deleting {ORIGINALS_DIR.relative_to(ADDON_DIR)} (use --keep-originals to keep it)")
+        print(f"  deleting {ORIGINALS_DIR} (use --keep-originals to keep it)")
         shutil.rmtree(ORIGINALS_DIR)
     load_cover_index()
     if missing:
@@ -1076,7 +1173,9 @@ def main() -> None:
               f"{stats['podcast_removed']} old ones deleted).")
     for w in stats["warnings"]:
         print(f"  WARNING: {w}")
-    print("\nIf you added new files, RESTART the game client; if only Library.lua changed, /reload is enough.")
+    print(f"\nYour music is in {MUSIC_DIR} (addon updates never touch it).")
+    print(f"In the game's AddOns list keep \"Kalimdor ZugZug Radio - My Music\" enabled.")
+    print("If you added new files, RESTART the game client; if only Library.lua changed, /reload is enough.")
     print("Playlists are created in-game: /kzz lib")
 
 

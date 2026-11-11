@@ -4,6 +4,9 @@ local L, CL = ns.L, ns.CL
 
 ns.ADDON = ADDON
 ns.ROOT = "Interface\\AddOns\\" .. ADDON .. "\\"
+-- Root of the user's files (tracks, covers): the KalimdorZugZugRadio_Library data addon written by
+-- Import music.py (KZZR_UserLibrary), or this addon's folder for a library imported before 0.8.
+ns.LIB_ROOT = ns.ROOT
 ns.ALL = "__all" -- virtual playlist with the whole user library
 
 -- Conditions in priority order: the first active one with an assigned playlist wins.
@@ -227,7 +230,14 @@ function ns.LoadLibrary()
   for _, t in ipairs({ ns.tracks, ns.gameTracks, ns.everyTrack, ns.episodes, ns.trackById, ns.userById,
                        ns.gameById, ns.episodeById }) do wipe(t) end
   local episodes = {}
-  for _, t in ipairs((KZZR_Library and KZZR_Library.tracks) or {}) do
+  local lib = KZZR_UserLibrary
+  if type(lib) == "table" and type(lib.addon) == "string" then
+    ns.LIB_ROOT = "Interface\\AddOns\\" .. lib.addon .. "\\"
+  else
+    lib, ns.LIB_ROOT = KZZR_Library, ns.ROOT -- library imported before 0.8, inside this addon
+  end
+  ns.library = lib
+  for _, t in ipairs((type(lib) == "table" and lib.tracks) or {}) do
     if type(t.file) == "string" and type(t.episode) == "string" then
       local ep = episodes[t.episode]
       if not ep then
@@ -269,7 +279,7 @@ end
 function ns.CoverOf(t)
   if not t then return nil end
   if t.icon then return t.icon end
-  if t.cover then return ns.ROOT .. t.cover end
+  if t.cover then return ns.LIB_ROOT .. t.cover end
   return nil
 end
 
@@ -856,8 +866,8 @@ function ns.DebugLines()
     ("ZugZug Radio debug: version %s, build %s, language %s (client %s), addon font %s"):format(
       s(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")),
       s((select(2, GetBuildInfo()))), s(ns.lang), s(GetLocale and GetLocale()), s(ns.useAddonFont)),
-    ("  KZZR_Library: %s, tracks in Library.lua: %s, tracks loaded: %d, game music: %d, playlists: %d, mode: %s"):format(
-      s(KZZR_Library ~= nil), s(KZZR_Library and KZZR_Library.tracks and #KZZR_Library.tracks),
+    ("  library: %s, tracks in Library.lua: %s, tracks loaded: %d, game music: %d, playlists: %d, mode: %s"):format(
+      s(ns.LIB_ROOT), s(ns.library and ns.library.tracks and #ns.library.tracks),
       #ns.tracks, #ns.gameTracks, ns.db and #ns.PlaylistNames() or -1, s(ns.db and ns.db.mode)),
     ("  frames: player %s, library %s, settings %s, minimap button %s, minimap button visible %s"):format(
       s(_G.KalimdorZugZugRadioFrame ~= nil), s(_G.KalimdorZugZugLibraryFrame ~= nil),

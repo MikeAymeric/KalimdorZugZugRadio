@@ -604,5 +604,20 @@ check("on a Korean client the game fonts are used", not ns.TextFont("뉴진스")
 clientLocale = "ruRU"; ns.InitLanguage(nil)
 check("on a Russian client Cyrillic keeps the game font", not ns.TextFont("Кино") and ns.TextFont("夜") == "cjk")
 clientLocale = "enUS"; ns.InitLanguage(nil)
+-- 0.8: the user's library lives in the KalimdorZugZugRadio_Library data addon (KZZR_UserLibrary)
+KZZR_UserLibrary = { addon = "KalimdorZugZugRadio_Library", tracks = {
+  { file = "music\\u.ogg", folder = "", title = "U", duration = 10, cover = "covers\\x.png" },
+} }
+ns.LoadLibrary()
+local u = ns.trackById["music\\u.ogg"]
+check("user library loaded from the data addon", ns.LIB_ROOT == "Interface\\AddOns\\KalimdorZugZugRadio_Library\\"
+  and u ~= nil and not ns.trackById["music\\a.ogg"]
+  and ns.CoverOf(u) == "Interface\\AddOns\\KalimdorZugZugRadio_Library\\covers\\x.png")
+ns.PlayFrom(ns.ALL, u)
+check("tracks play from the data addon", playing == "Interface\\AddOns\\KalimdorZugZugRadio_Library\\music\\u.ogg")
+KZZR_UserLibrary = nil
+ns.LoadLibrary()
+check("library imported before 0.8: still read from the addon folder",
+  ns.LIB_ROOT == "Interface\\AddOns\\KalimdorZugZugRadio\\" and ns.trackById["music\\a.ogg"] ~= nil)
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

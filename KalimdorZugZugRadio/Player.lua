@@ -90,11 +90,11 @@ local function startTrack()
     P.part, P.offset = part, 0
     for i = 1, part - 1 do P.offset = P.offset + track.parts[i].duration end
     ns.SetEpisodePart(track, part)
-    source, dur = ns.ROOT .. track.parts[part].file, track.parts[part].duration
+    source, dur = ns.LIB_ROOT .. track.parts[part].file, track.parts[part].duration
   else
-    -- game music: PlayMusic takes the FileDataID; user tracks: path inside the addon
+    -- game music: PlayMusic takes the FileDataID; user tracks: path inside the data addon
     P.part, P.offset = nil, 0
-    source, dur = track.fid or (ns.ROOT .. track.file), track.duration
+    source, dur = track.fid or (ns.LIB_ROOT .. track.file), track.duration
   end
   local ok, err = pcall(playMusic, source)
   if not ok then ns.Print("MSG_PLAYMUSIC_ERROR", tostring(err)) end

@@ -58,11 +58,13 @@ It plays your own playlists based on what your character is doing: a boss fight,
 
 ### Your own music and podcasts
 
-Put your files in the addon's `music` folder and double-click **Import music.py** in the addon folder (it needs [Python](https://www.python.org/downloads/) and ffmpeg: `winget install Gyan.FFmpeg`). A small menu lets you pick the options, then the script converts the files, extracts the covers and builds the library. Then restart the game client.
+Double-click **Import music.py** in the addon folder (it needs [Python](https://www.python.org/downloads/) and ffmpeg: `winget install Gyan.FFmpeg`). A small menu lets you pick the options and opens your music folder (`AddOns\KalimdorZugZugRadio_Library\music`): put your files there, then the script converts them, extracts the covers and builds the library. Then restart the game client.
+
+Your music lives in that separate folder (shown in the AddOns list as *Kalimdor ZugZug Radio - My Music*), so **updating the addon never deletes it**. Updating from 0.7 or older: back up `AddOns\KalimdorZugZugRadio\music` and `covers` first, then run Import music.py once to move them.
 
 Already have a music library somewhere else (Plex, iTunes, a folder of albums)? Choose it in the menu: the script copies and converts only the tracks the addon doesn't have yet, after showing you the list, and never modifies your library.
 
-For podcasts, list them in `podcasts.txt` in the addon folder (one link per line) and run the same script.
+For podcasts, list them in `podcasts.txt` in your music library folder (one link per line) and run the same script.
 
 The full guide is on [GitHub](https://github.com/MikeAymeric/KalimdorZugZugRadio#readme).
 

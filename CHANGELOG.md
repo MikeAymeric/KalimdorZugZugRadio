@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- **Your music is safe when you update the addon.** Music, covers, `Library.lua`, `podcasts.txt` and the import settings now live in a separate folder, `AddOns\KalimdorZugZugRadio_Library` (shown in the AddOns list as *Kalimdor ZugZug Radio - My Music*), which addon updates, including the CurseForge app's, never touch.
+- **Updating from 0.7 or older: back up `AddOns\KalimdorZugZugRadio\music` and `covers` before updating**, because the old layout kept them inside the addon folder. Then run Import music.py once: it moves everything to the new folder. Your playlists keep working.
+- Files dropped into the old `KalimdorZugZugRadio\music` folder are moved to the new one by the import.
+- Import menu: option 7 opens your music folder.
+
 ## 0.7.1
 
 - **Import music.py shows a menu** with the options (keep originals, rename, podcasts, recover covers, addon folder): no terminal needed.
