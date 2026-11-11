@@ -37,6 +37,7 @@ local DEFAULTS = {
   profiles = {},
   charProfiles = {}, -- "Name-Realm" -> profile name
   crossfade = true,  -- fade the music volume when the condition changes
+  fightTail = 8,     -- seconds the fight music keeps playing (fading out) after the combat
   duck = true,       -- lower the music during cinematics and dialogues
   afkPause = true,   -- pause while AFK
   userVolume = nil,  -- the user's Music volume (the addon multiplies it, see Player.lua)

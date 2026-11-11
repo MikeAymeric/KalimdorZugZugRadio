@@ -161,6 +161,7 @@ local function is(name) return playing ~= nil and tostring(playing):find(name, 1
 
 fire("ADDON_LOADED", "KalimdorZugZugRadio"); fire("PLAYER_LOGIN"); fire("PLAYER_ENTERING_WORLD", true, false)
 ns.db.crossfade = false -- tested separately below
+ns.db.fightTail = 4 -- the fight tail is tested separately below
 check("no assignments -> silence", playing == nil)
 ns.db.shuffle = false
 assert(ns.CreatePlaylist("Explore")); assert(ns.CreatePlaylist("Fight"))
@@ -517,6 +518,54 @@ fire("ENCOUNTER_END", 672); G.combat = false; fire("PLAYER_REGEN_ENABLED"); adva
 G.combat = true; fire("ENCOUNTER_START", 999, "Other boss", 1, 5); fire("PLAYER_REGEN_DISABLED"); advance(1)
 check("other bosses use the generic boss playlist", ns.Player.playlist ~= "Rag")
 fire("ENCOUNTER_END", 999); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+
+-- 1.0: after a fight the music lasts (fading out) for a few seconds; every fight starts a new track
+local function vol() return tonumber(musicVolume) end
+ns.db.fightTail = 8; ns.db.crossfade = true; ns.db.shuffle = true
+ns.CreatePlaylist("Pulls"); ns.SetManyInPlaylist("Pulls", { "music\\a.ogg", "music\\b.ogg", "music\\c.mp3" }, true)
+ns.Assign("combat", "Pulls"); ns.SetMode("auto"); advance(5)
+local calm = ns.Player.playlist -- the playlist out of combat
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(2)
+local first = ns.Player.track
+check("fight: combat music", ns.Player.playlist == "Pulls" and math.abs(vol() - 0.8) < 0.001)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(3)
+check("fight tail: same song, fading out", ns.Player.playlist == "Pulls" and ns.Player.track == first
+  and vol() < 0.75 and vol() > 0.05 and ns.db.userVolume == 0.8)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1.5)
+check("back in the fight: same song, volume restored", ns.Player.track == first and math.abs(vol() - 0.8) < 0.001)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(4.5)
+check("tail still running", ns.Player.playlist == "Pulls")
+advance(1.5)
+check("track ended during the tail: next condition at once", ns.Player.playlist == calm and ns.Rules.current ~= "combat")
+advance(2)
+check("volume back after the tail", math.abs(vol() - 0.8) < 0.001)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+local second = ns.Player.track
+check("a new fight starts a different track", ns.Player.playlist == "Pulls" and second ~= first)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(7.5)
+check("the tail lasts the chosen 8 s", ns.Player.playlist == "Pulls" and ns.Player.track == second and vol() < 0.1)
+advance(1); advance(1)
+check("after the tail: back to the calm music, full volume", ns.Player.playlist == calm and math.abs(vol() - 0.8) < 0.001)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(3)
+ns.SetMode(ns.ALL); advance(1.5)
+check("free play during the tail restores the volume", math.abs(vol() - 0.8) < 0.001)
+ns.SetMode("auto"); advance(5)
+-- boss: the theme goes on while adds are alive, then a short 4 s tail
+ns.CreatePlaylist("BossPL"); ns.SetInPlaylist("BossPL", "music\\c.mp3", true); ns.Assign("boss", "BossPL")
+G.combat = true; fire("ENCOUNTER_START", 1, "Some boss", 1, 5); fire("PLAYER_REGEN_DISABLED"); advance(1)
+check("boss music", ns.Player.playlist == "BossPL")
+fire("ENCOUNTER_END", 1); advance(2)
+check("boss dead, adds still fighting: boss theme goes on", ns.Rules.current == "boss" and ns.Player.playlist == "BossPL")
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(3.5)
+check("short tail after an encounter: still the boss theme", ns.Player.playlist == "BossPL")
+advance(1)
+check("short tail is 4 s", ns.Player.playlist == calm)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(5)
+check("a normal fight after a boss uses the long tail again", ns.Player.playlist == "Pulls")
+advance(5)
+ns.DeletePlaylist("Pulls"); ns.DeletePlaylist("BossPL"); ns.db.fightTail = 4; ns.db.crossfade = false; advance(5)
 
 -- key bindings
 check("binding names defined", BINDING_HEADER_KZZR == "Kalimdor ZugZug Radio" and BINDING_NAME_KZZR_PLAY ~= nil)

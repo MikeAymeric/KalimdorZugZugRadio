@@ -12,6 +12,12 @@ local AURA_CAMPFIRE_NEARBY = 1283391 -- "Campfire Nearby": close to a fire
 local AURA_WELCOMING_FIRE  = 1229739 -- "Welcoming Campfire": sitting, lasts ~60s
 local ELITE_CLASSES = { elite = true, rare = true, rareelite = true, worldboss = true }
 local DOWNGRADE_DELAY = 4 -- seconds before switching to a less important condition
+-- Fights: after the combat the music keeps playing (and fades out) for a few seconds
+-- before the next condition, so chained pulls don't restart it every time.
+local FIGHT = { boss = true, elite = true, combat = true }
+local FIGHT_TAIL_DEFAULT = 8
+local ENCOUNTER_TAIL = 4 -- shorter tail once a boss encounter is over
+R.FIGHT = FIGHT
 
 local FISHING_SPELLS = { [7620] = true, [7731] = true, [7732] = true, [18248] = true, [33095] = true,
                          [51294] = true, [88868] = true, [131474] = true, [131490] = true }
@@ -19,12 +25,13 @@ local FISHING_GRACE = 20 -- seconds of "still fishing" between two casts
 local NIGHT_START, NIGHT_END = 21, 6 -- game-time hours
 
 local state = {
-  encounter = false, combat = false, elite = false, taxi = false, campfire = false, dungeon = false,
+  encounter = false, bossTail = false, shortTail = false, combat = false, elite = false, taxi = false, campfire = false, dungeon = false,
   resting = false, levelup = false, pvp = false, dead = false, fishing = false, swimming = false,
   mounted = false, night = false,
 }
 local fishingUntil = 0
-local pending, pendingKey
+local pending, pendingKey -- pendingKey "__tail" = fading out after a fight
+local TAIL = "__tail"
 
 ---------------------------------------------------------------------------
 -- Detection
@@ -90,7 +97,7 @@ local activeSet = {}
 function R:ActiveSet()
   local t = activeSet
   t.levelup = state.levelup
-  t.boss = state.encounter
+  t.boss = state.encounter or state.bossTail -- the boss theme lasts while adds are still fighting
   t.elite = state.combat and state.elite
   t.pvp = state.pvp
   t.combat = state.combat
@@ -124,9 +131,16 @@ end
 -- Evaluation: moving up in priority is immediate, moving down waits a few
 -- seconds (avoids constant switching between pulls).
 ---------------------------------------------------------------------------
-local function cancelPending()
+-- restore = the fight goes on (or the rules stop): bring back the volume of a fight tail.
+local function cancelPending(restore)
   if pending then pending:Cancel() end
+  if restore and pendingKey == TAIL then ns.Player:CancelFadeOut() end
   pending, pendingKey = nil, nil
+end
+
+function R:FightTailLength()
+  if state.shortTail then return ENCOUNTER_TAIL end
+  return tonumber(ns.db.fightTail) or FIGHT_TAIL_DEFAULT
 end
 
 local function priority(key)
@@ -134,8 +148,33 @@ local function priority(key)
 end
 
 function R:Reset()
-  cancelPending()
+  cancelPending(true)
   self.current = nil
+end
+
+function R:Apply(key, playlist)
+  cancelPending()
+  -- every fight starts with a new track; a fight that goes on keeps its song
+  local fresh = FIGHT[key] and key ~= self.current
+  self.current = key
+  ns.Player:SwitchTo(playlist, key, fresh) -- with a crossfade when enabled
+  ns.Fire("SITUATION_CHANGED", key)
+end
+
+-- End of the fight tail: switch to whatever condition is active now.
+local function finishTail()
+  pending, pendingKey = nil, nil
+  ns.Player:EndFadeOut()
+  R:Apply(R:Resolve())
+end
+
+-- Called by the player when a track ends: during a fight tail, don't start another fight
+-- track at low volume.
+function R:TrackEnded()
+  if pendingKey ~= TAIL then return false end
+  pending:Cancel()
+  finishTail()
+  return true
 end
 
 function R:Evaluate(immediate)
@@ -143,24 +182,25 @@ function R:Evaluate(immediate)
   if not ns.db or not ns.db.enabled or ns.db.mode ~= "auto" then return end
   local key, playlist = self:Resolve()
 
-  local function apply()
-    cancelPending()
-    self.current = key
-    ns.Player:SwitchTo(playlist, key) -- with a crossfade when enabled
-    ns.Fire("SITUATION_CHANGED", key)
-  end
-
   local P = ns.Player
   if key == self.current and playlist == P.playlist and (P.playing or P:IsHeld() or not playlist) then
-    cancelPending()
+    cancelPending(true) -- back in the fight during the tail: the song goes on
     return
   end
   if immediate or self.current == nil or priority(key) < priority(self.current) then
-    apply()
+    self:Apply(key, playlist)
+  elseif FIGHT[self.current] and key ~= self.current and P.playing then
+    if pendingKey ~= TAIL then
+      cancelPending()
+      local length = self:FightTailLength()
+      pendingKey = TAIL
+      pending = C_Timer.NewTimer(length, finishTail)
+      P:FadeOutSlowly(length)
+    end
   elseif pendingKey ~= key then
     cancelPending()
     pendingKey = key
-    pending = C_Timer.NewTimer(DOWNGRADE_DELAY, apply)
+    pending = C_Timer.NewTimer(DOWNGRADE_DELAY, function() self:Apply(key, playlist) end)
   end
 end
 
@@ -190,6 +230,7 @@ function R:Start()
   self.started = true
   on("ENCOUNTER_START", function(encounterID, encounterName)
     state.encounter = true
+    state.shortTail = false
     -- remember the boss, so a specific playlist can be assigned to it in the settings
     R.encounterID = ns.Safe(function() return encounterID end)
     local bossName = ns.Safe(function() return encounterName end)
@@ -228,15 +269,22 @@ function R:Start()
   for _, ev in ipairs({ "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED" }) do
     on(ev, updateWorld)
   end
-  on("ENCOUNTER_END", function() state.encounter = false R.encounterID = nil end)
+  on("ENCOUNTER_END", function()
+    state.encounter = false
+    state.bossTail = state.combat -- adds still fighting: keep the boss theme until the combat ends
+    state.shortTail = true
+    R.encounterID = nil
+  end)
   on("PLAYER_REGEN_DISABLED", function()
     state.combat = true
     state.campfire = false
+    if not state.encounter and not state.bossTail then state.shortTail = false end
     checkElite()
   end)
   on("PLAYER_REGEN_ENABLED", function()
     state.combat = false
     state.elite = false
+    state.bossTail = false
     updateCampfire()
   end)
   on("PLAYER_TARGET_CHANGED", function()
@@ -251,7 +299,7 @@ function R:Start()
   end)
   on("PLAYER_STARTED_MOVING", function() state.campfire = false end)
   on("PLAYER_ENTERING_WORLD", function()
-    state.encounter = false
+    state.encounter, state.bossTail = false, false
     updateWorld()
   end)
   for _, ev in ipairs({ "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED", "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA" }) do

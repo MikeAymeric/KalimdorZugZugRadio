@@ -108,6 +108,27 @@ local function build(p)
   end)
   if p.profile then p.profile:SetPoint("LEFT", profLabel, "RIGHT", 12, 0) end
 
+  -- how long the fight music lasts (fading out) after the combat
+  local tailLabel = text(c, "GameFontNormal")
+  tailLabel:SetPoint("TOPLEFT", 334, -226)
+  tailLabel:SetText(L.OPT_FIGHT_TAIL)
+  p.fightTail = ns.MakeDropdown(c, 80, L.FIGHT_TAIL_SECONDS:format(8), function(_, root)
+    for _, sec in ipairs({ 4, 6, 8, 10 }) do
+      ns.StyleMenuItem(root:CreateRadio(L.FIGHT_TAIL_SECONDS:format(sec),
+        function() return (ns.db.fightTail or 8) == sec end,
+        function() ns.db.fightTail = sec end))
+    end
+  end)
+  if p.fightTail then
+    p.fightTail:SetPoint("LEFT", tailLabel, "RIGHT", 10, 0)
+    if p.fightTail.HookScript then
+      p.fightTail:HookScript("OnEnter", function(self)
+        ns.ShowTooltip(self, "ANCHOR_TOP", { L.OPT_FIGHT_TAIL, L.TT_FIGHT_TAIL:format(4) })
+      end)
+      p.fightTail:HookScript("OnLeave", function() ns.HideTooltip() end)
+    end
+  end
+
   local langLabel = text(c, "GameFontNormal")
   langLabel:SetPoint("TOPLEFT", 20, -262)
   langLabel:SetText(L.LANGUAGE)
@@ -236,7 +257,7 @@ function S:RefreshMenus()
   for _, row in ipairs(panel.conditions) do
     if row.dropdown and row.dropdown.GenerateMenu then row.dropdown:GenerateMenu() end
   end
-  for _, dd in ipairs({ panel.lang, panel.profile }) do
+  for _, dd in ipairs({ panel.lang, panel.profile, panel.fightTail }) do
     if dd and dd.GenerateMenu then dd:GenerateMenu() end
   end
 end

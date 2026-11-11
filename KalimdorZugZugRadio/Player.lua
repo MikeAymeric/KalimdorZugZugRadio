@@ -67,6 +67,7 @@ end
 
 local function startTrack()
   local st, pl = getState(P.playlist)
+  st.started = true
   local track = pl.tracks[st.queue[st.pos]]
   local explicit = P.explicitNext
   P.explicitNext = nil
@@ -104,6 +105,8 @@ local function startTrack()
   if dur > 0 then
     timer = C_Timer.NewTimer(dur + 0.5, function()
       timer = nil
+      -- the track ended while the music fades out after a fight: move on at once
+      if ns.Rules and ns.Rules.TrackEnded and ns.Rules:TrackEnded() then return end
       P:Next(true)
     end)
   end
@@ -143,8 +146,26 @@ function P:PlayTrack(name, track)
   self:Play(name)
 end
 
+-- Moves a playlist that already played to another track: every fight starts with a
+-- different song (the next one of the shuffled queue, or a random one without shuffle).
+local function freshTrack(name)
+  local st, pl = getState(name)
+  if not st.started or #st.queue < 2 then return end
+  if ns.db.shuffle then
+    st.pos = st.pos + 1
+    if st.pos > #st.queue then
+      st.queue = buildQueue(#pl.tracks)
+      st.pos = 1
+    end
+  else
+    local r = math.random(#st.queue - 1)
+    st.pos = r >= st.pos and r + 1 or r
+  end
+end
+
 -- Switches playlist. Doesn't restart if it's already the one playing.
-function P:SetPlaylist(name)
+-- fresh = start a different track than the one the playlist stopped on.
+function P:SetPlaylist(name, fresh)
   if not playable(name) then
     self.playlist = nil
     self.track = nil
@@ -153,6 +174,7 @@ function P:SetPlaylist(name)
     return
   end
   if name == self.playlist and self.playing then return end
+  if fresh then freshTrack(name) end
   self.playlist = name
   if self:IsHeld() or not ns.db.enabled then
     local st, pl = getState(name)
@@ -207,20 +229,28 @@ local function applyVolume()
   V.lastWritten, V.lastMul = eff, mul
 end
 
--- Animates factor V[field] to `to`, then calls done().
-local function tween(field, to, done)
+-- Animates factor V[field] to `to` in `time` seconds (default FADE_TIME), then calls done().
+local function tween(field, to, done, time)
   if tweens[field] then tweens[field]:Cancel() end
+  time = time or FADE_TIME
+  local steps = math.max(FADE_STEPS, math.floor(time * 5)) -- at most 5 CVar writes per second
   local from, step = V[field], 0
-  tweens[field] = C_Timer.NewTicker(FADE_TIME / FADE_STEPS, function()
+  tweens[field] = C_Timer.NewTicker(time / steps, function()
     step = step + 1
-    V[field] = from + (to - from) * step / FADE_STEPS
+    V[field] = from + (to - from) * step / steps
     applyVolume()
-    if step >= FADE_STEPS then
+    if step >= steps then
       tweens[field]:Cancel()
       tweens[field] = nil
       if done then done() end
     end
-  end, FADE_STEPS)
+  end, steps)
+end
+
+-- Sets V[field] at once, stopping its animation.
+local function setFactor(field, value)
+  if tweens[field] then tweens[field]:Cancel() tweens[field] = nil end
+  V[field] = value
 end
 
 -- Called on load: recover from a /reload or crash in the middle of a fade/duck.
@@ -267,18 +297,42 @@ function P:SetDucked(on)
 end
 
 -- Switch playlist because the condition changed (fades if enabled and something is playing).
-function P:SwitchTo(name, key)
+-- fresh: start a different track than last time (fights).
+function P:SwitchTo(name, key, fresh)
   local mult = key and ns.ConditionVolume(key) or 1
   if not ns.db.crossfade or not self.playing or name == self.playlist then
+    setFactor("fade", 1) -- a fight fade-out may have been interrupted
     self:SetConditionVolume(mult)
-    self:SetPlaylist(name)
+    self:SetPlaylist(name, fresh)
     return
   end
-  tween("fade", 0, function()
+  local function switch()
     V.cond = mult
-    self:SetPlaylist(name)
+    self:SetPlaylist(name, fresh)
     tween("fade", 1)
-  end)
+  end
+  if V.fade < 0.02 then -- already faded out (end of a fight): no second fade-out
+    setFactor("fade", 0)
+    switch()
+  else
+    tween("fade", 0, switch)
+  end
+end
+
+-- After a fight: the music fades out slowly while the addon waits to leave the condition
+-- (only with crossfade enabled).
+function P:FadeOutSlowly(seconds)
+  if ns.db.crossfade and self.playing then tween("fade", 0, nil, seconds) end
+end
+
+-- End of the fight tail (or its track ended): the fade-out is over, switch without a second one.
+function P:EndFadeOut()
+  if tweens.fade then setFactor("fade", 0) end
+end
+
+-- Back in the fight before the end of the fade-out: back to the previous volume.
+function P:CancelFadeOut()
+  if V.fade < 1 or tweens.fade then tween("fade", 1, nil, 1) end
 end
 
 -- True when the music must stay silent: stopped by the user, or paused while AFK.
