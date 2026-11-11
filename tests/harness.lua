@@ -149,7 +149,7 @@ KZZR_GameMusic = {
 }
 
 local ns = {}
-for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Minimap", "Banner" }) do
+for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Onboarding", "Minimap", "Banner" }) do
   assert(load(SRC[f], f))("KalimdorZugZugRadio", ns)
 end
 local fails = 0
@@ -723,6 +723,37 @@ do
   check("presets cover the main conditions", keys.combat and keys.boss and keys.town and keys.dungeon and keys.idle
     and keys.night and keys.campfire and keys.dead and keys.levelup)
   KZZR_GameMusic = saved
+end
+
+-- 1.0: onboarding (shown once, ready-made playlists, never overwrites)
+do
+  local O = ns.Onboarding
+  local win = KalimdorZugZugOnboarding
+  check("the guide opened by itself at the first login", win ~= nil and win:IsShown())
+  rawget(win, "_OnHide")(win)
+  check("closing the guide marks it as seen", ns.db.onboardingSeen == true)
+  local idleBefore = ns.db.assign.idle
+  ns.db.assign.town = nil
+  SlashCmdList.KZZRADIO("tutorial")
+  check("/kzz tutorial opens it again", O:IsShown())
+  O.source = "game"; O:Refresh(); O:Go(4); O:Next()
+  local name = O.PresetName("town")
+  local pl = ns.GetPlaylist(name)
+  check("finish creates the ready-made playlist", pl ~= nil and #pl.tracks == 1 and pl.tracks[1].file == "game:53198")
+  check("and assigns it to its condition", ns.db.assign.town == name)
+  check("conditions that had a playlist keep it", ns.db.assign.idle == idleBefore)
+  check("presets don't overwrite: running it again creates nothing", O.CreatePresets({ "town" }) == 0
+    and ns.db.assign.town == name and #ns.GetPlaylist(name).tracks == 1)
+  ns.SetInPlaylist(name, "game:8158670", true)
+  O.CreatePresets({ "town" })
+  check("a ready-made playlist edited by the user is kept as it is", #ns.GetPlaylist(name).tracks == 2)
+  check("the settings have a Tutorial button", ns.Settings and KalimdorZugZugSettingsPanel ~= nil)
+  ns.DeletePlaylist(name); advance(5)
+  -- playlists pointing to music the library no longer has
+  local before = ns.MissingUserTracks()
+  ns.CreatePlaylist("Lost"); table.insert(ns.db.playlists.Lost, "music/gone.ogg"); table.insert(ns.db.playlists.Lost, "game:1")
+  check("missing user tracks are counted (game ids ignored)", ns.MissingUserTracks() == before + 1)
+  ns.DeletePlaylist("Lost"); advance(1)
 end
 
 -- key bindings

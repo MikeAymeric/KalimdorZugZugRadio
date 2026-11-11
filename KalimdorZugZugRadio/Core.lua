@@ -1089,6 +1089,7 @@ SlashCmdList.KZZRADIO = function(msg)
   elseif cmd == "minimap" then ns.Minimap:Toggle()
   elseif cmd == "lang" or cmd == "language" then languageCommand(rest)
   elseif cmd == "config" or cmd == "settings" or cmd == "options" then ns.Settings:Open()
+  elseif cmd == "tutorial" or cmd == "guide" or cmd == "welcome" then ns.Onboarding:Show()
   elseif cmd == "stats" then
     local played = 0
     for _, st in pairs(ns.db.stats) do played = played + (st.plays or 0) end
@@ -1107,6 +1108,6 @@ SlashCmdList.KZZRADIO = function(msg)
     for _, line in ipairs(ns.db.lastDebug) do print(line) end
     print("  (saved: /reload to write it to SavedVariables\\KalimdorZugZugRadio.lua)")
   else
-    for i = 1, 12 do ns.Print("HELP_" .. i) end
+    for i = 1, 13 do ns.Print("HELP_" .. i) end
   end
 end

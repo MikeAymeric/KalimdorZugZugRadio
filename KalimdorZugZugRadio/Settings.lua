@@ -91,6 +91,8 @@ local function build(p)
 
   p.openLib = ns.MakeButton(c, L.OPEN_LIBRARY, 130, function() ns.LibraryUI:Toggle(true) end, L.TT_LIBRARY)
   p.openLib:SetPoint("TOPRIGHT", -16, -16)
+  p.tutorial = ns.MakeButton(c, L.TUTORIAL, 110, function() ns.Onboarding:Show() end, L.TT_TUTORIAL)
+  p.tutorial:SetPoint("RIGHT", p.openLib, "LEFT", -8, 0)
 
   -- General -------------------------------------------------------------------
   sectionHeader(c, L.SECTION_GENERAL, -56)

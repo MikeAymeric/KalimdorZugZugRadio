@@ -32,5 +32,6 @@ Rules.lua
 UI.lua
 LibraryUI.lua
 Settings.lua
+Onboarding.lua
 Minimap.lua
 Banner.lua
