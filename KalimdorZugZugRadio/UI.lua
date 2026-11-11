@@ -124,6 +124,23 @@ local function assignHereMenu(root)
   end
 end
 
+-- "Up next": the queued tracks (click one to take it out of the queue) and "Clear".
+local function queueMenu(root)
+  local queued = ns.QueuedTracks()
+  if #queued == 0 then return end
+  root:CreateDivider()
+  local entry = root:CreateButton(L.UP_NEXT:format(#queued))
+  ns.StyleMenuItem(entry)
+  ns.StyleMenuItem(entry:CreateTitle(L.QUEUE_REMOVE_HINT))
+  for i = 1, math.min(#queued, 20) do
+    local t = queued[i]
+    local label = ("%d. %s"):format(i, ns.TrackLabel(t))
+    ns.StyleMenuItem(entry:CreateButton(label, function() ns.UnqueueTrack(t) end), ns.TextFont(label))
+  end
+  entry:CreateDivider()
+  ns.StyleMenuItem(entry:CreateButton(L.QUEUE_CLEAR, function() ns.ClearQueue() end))
+end
+
 local function setupDropdown()
   return ns.MakeDropdown(f, 140, L.PLAYLIST, function(_, root)
     ns.StyleMenuItem(root:CreateRadio(L.AUTO_CONDITIONS,
@@ -139,6 +156,7 @@ local function setupDropdown()
       if count == 0 and radio.SetEnabled then radio:SetEnabled(false) end
     end
     assignHereMenu(root)
+    queueMenu(root)
     root:CreateDivider()
     ns.StyleMenuItem(root:CreateButton(L.MANAGE_LIBRARY, function() ns.LibraryUI:Toggle(true) end))
     ns.StyleMenuItem(root:CreateButton(L.MENU_SETTINGS, function() ns.Settings:Open() end))
@@ -294,7 +312,7 @@ function UI:Build()
     ns.On(ev, refresh)
   end
   -- the dropdown menu is only rebuilt when its content can change
-  for _, ev in ipairs({ "MODE_CHANGED", "PLAYLISTS_CHANGED" }) do
+  for _, ev in ipairs({ "MODE_CHANGED", "PLAYLISTS_CHANGED", "QUEUE_CHANGED" }) do
     ns.On(ev, function() if f.dropdown and f.dropdown.GenerateMenu then f.dropdown:GenerateMenu() end end)
   end
   buildCompact()
@@ -627,6 +645,16 @@ function UI:RefreshProgress()
   end
 end
 
+-- "Auto · <condition> · <playlist>"; the condition is left out when the playlist's name already
+-- says it (a playlist called "Campfire", or the ready-made "OST - Campfire").
+function UI.AutoStatus(key, playlist)
+  local cond = key and ns.SituationLabel(key) or L.ZONE_MUSIC
+  if not playlist then return L.STATUS_AUTO .. "  ·  " .. cond end
+  local label = ns.PlaylistLabel(playlist)
+  if label:lower():find(cond:lower(), 1, true) then return L.STATUS_AUTO .. "  ·  " .. label end
+  return L.STATUS_AUTO .. "  ·  " .. cond .. "  ·  " .. label
+end
+
 function UI:Refresh()
   if not f then return end
   local P = ns.Player
@@ -665,9 +693,7 @@ function UI:Refresh()
   if not ns.db.enabled then
     status = "|cff808080" .. L.STATUS_RADIO_OFF .. "|r  (/kzz on)"
   elseif ns.db.mode == "auto" then
-    local key = ns.Rules.current
-    status = L.STATUS_AUTO .. "  ·  " .. (key and ns.SituationLabel(key) or L.ZONE_MUSIC)
-    if P.playlist then status = status .. "  ·  " .. ns.PlaylistLabel(P.playlist) end
+    status = UI.AutoStatus(ns.Rules.current, P.playlist)
   else
     -- orange: free play ignores the conditions, make it obvious
     status = "|cffff9a1a" .. L.STATUS_FREE .. "|r  ·  " .. ns.PlaylistLabel(ns.db.mode)

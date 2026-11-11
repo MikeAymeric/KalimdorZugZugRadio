@@ -886,5 +886,109 @@ KZZR_UserLibrary = nil
 ns.LoadLibrary()
 check("library imported before 0.8: still read from the addon folder",
   ns.LIB_ROOT == "Interface\\AddOns\\KalimdorZugZugRadio\\" and ns.trackById["music\\a.ogg"] ~= nil)
+-- 1.0 block 7: smart playlists, albums/artists, "Play next" queue, status line
+do
+  local a, b, c = ns.trackById["music\\a.ogg"], ns.trackById["music\\b.ogg"], ns.trackById["music\\c.mp3"]
+  local orgri = ns.trackById["game:53198"]
+  ns.SetEnabled(true); ns.SetMode("auto"); ns.db.shuffle = false; ns.Player:SetShuffle(false); ns.ClearQueue()
+  wipe(ns.db.stats); wipe(ns.db.favorites); wipe(ns.db.excluded)
+  ns.CreatePlaylist("Explore")
+  local name = ns.SaveSmartPlaylist(nil, "Rocky", { match = "all", rules = { { field = "folder", op = "has", value = "rock" } } })
+  local pl = ns.GetPlaylist("Rocky")
+  check("smart playlist: folder contains", name == "Rocky" and #pl.tracks == 1 and pl.tracks[1] == c and ns.IsSmart("Rocky"))
+  check("smart playlist listed with the others", (function()
+    for _, n in ipairs(ns.AllPlaylistNames()) do if n == "Rocky" then return true end end end)())
+  local _, err = ns.SaveSmartPlaylist(nil, "explore", { rules = {} })
+  check("smart playlist name must be unique", err == "ERR_EXISTS")
+  ns.SaveSmartPlaylist(nil, "AnyOf", { match = "any", rules = { { field = "artist", op = "is", value = "x" },
+    { field = "source", op = "is", value = "game" } } })
+  local any = ns.GetPlaylist("AnyOf").tracks
+  check("smart playlist: match any (artist X or game music)", #any == 3 and ns.GetPlaylist("AnyOf").has[a.file]
+    and ns.GetPlaylist("AnyOf").has["game:53198"] and not ns.GetPlaylist("AnyOf").has[b.file])
+  ns.db.stats[b.file] = { plays = 3, seconds = 30 }
+  ns.db.favorites[c.file] = true
+  ns.SaveSmartPlaylist(nil, "Played", { rules = { { field = "plays", op = "ge", value = "2" }, { field = "source", op = "is", value = "mine" } } })
+  ns.SaveSmartPlaylist(nil, "FavNew", { rules = { { field = "favorite", op = "yes" }, { field = "minutes", op = "le", value = "1" } } })
+  check("smart playlist: plays at least / favourite + length", #ns.GetPlaylist("Played").tracks == 1
+    and ns.GetPlaylist("Played").tracks[1] == b and #ns.GetPlaylist("FavNew").tracks == 1 and ns.GetPlaylist("FavNew").tracks[1] == c)
+  ns.SaveSmartPlaylist(nil, "Fresh", { rules = { { field = "never", op = "yes" }, { field = "source", op = "isnot", value = "podcast" },
+    { field = "title", op = "not", value = "hyjal" } } })
+  local fresh = ns.GetPlaylist("Fresh")
+  check("smart playlist: never played, source is not, title doesn't contain", not fresh.has[b.file] and fresh.has[a.file]
+    and fresh.has["game:53198"] and not fresh.has["game:8158670"] and not fresh.has["ep:k1"])
+  ns.Assign("night", "Rocky")
+  ns.db.zones[999] = { playlist = "Rocky", name = "Somewhere" }
+  local renamed = ns.SaveSmartPlaylist("Rocky", "Rock only", { rules = { { field = "folder", op = "is", value = "rock" } } })
+  check("renaming a smart playlist moves its assignments", renamed == "Rock only" and ns.db.assign.night == "Rock only"
+    and ns.db.zones[999].playlist == "Rock only" and not ns.GetPlaylist("Rocky") and #ns.GetPlaylist("Rock only").tracks == 1)
+  ns.DeletePlaylist("Rock only")
+  check("deleting a smart playlist clears its assignments", ns.db.assign.night == nil and ns.db.zones[999] == nil
+    and not ns.IsSmart("Rock only"))
+  ns.db.favorites[c.file] = nil
+  ns.SetMode("Fresh")
+  check("a smart playlist plays in free play", ns.Player.playlist == "Fresh" and playing ~= nil)
+  ns.SetMode("auto")
+  for _, n in ipairs({ "AnyOf", "Played", "FavNew", "Fresh" }) do ns.DeletePlaylist(n) end
+
+  -- albums and artists
+  local albumName = ns.GroupPlaylistName("album", orgri)
+  check("album playlist of a game track", ns.GetPlaylist(albumName) and #ns.GetPlaylist(albumName).tracks == 1
+    and ns.PlaylistLabel(albumName) == "Orgrimmar")
+  local artists = ns.Groups(ns.tracks, "artist")
+  check("artists of the library (unknown artist grouped)", #artists == 2 and artists[1].label == "Unknown artist"
+    and artists[1].count == 2 and artists[2].label == "X")
+  check("podcasts are left out of the album view", #ns.Groups(ns.episodes, "album") == 0)
+  ns.SetMode(ns.GroupPlaylistName("artist", a))
+  check("an artist plays as a playlist", ns.Player.playlist == "__artist:x" and is("a.ogg")
+    and ns.FindPlaylist("__artist:x") == "__artist:x")
+  ns.SetMode("auto")
+
+  -- "Play next" queue
+  ns.PlayFrom(ns.ALL, a)
+  ns.QueueTracks({ orgri }, true)
+  check("queued track listed", #ns.QueuedTracks() == 1 and ns.QueuedTracks()[1] == orgri)
+  ns.Player:Next()
+  check("Next plays the queued track", playing == 53198 and ns.Player.fromQueue and #ns.db.upNext == 0)
+  ns.Player:Next()
+  check("then the playlist goes on after the track it was on", is("b.ogg") and not ns.Player.fromQueue)
+  ns.QueueTracks({ orgri, ns.trackById["game:8158670"] }, false)
+  ns.QueueTracks({ c }, true)
+  check("Play next goes before what is queued", ns.db.upNext[1] == c.file and #ns.db.upNext == 3)
+  ns.Player:Next()
+  check("queued track from the same playlist", is("c.mp3") and ns.Player.fromQueue)
+  ns.Player:Prev()
+  check("Prev on a queued track goes back to the playlist's track", is("b.ogg") and not ns.Player.fromQueue)
+  ns.UnqueueTrack(orgri)
+  check("a track can be taken out of the queue", #ns.db.upNext == 1 and ns.db.upNext[1] == "game:8158670")
+  advance(11) -- b ends by itself: the queue goes first
+  check("end of a track plays the queue", playing == 8158670)
+  ns.ClearQueue()
+  ns.SetMode("auto")
+  ns.Assign("combat", "Fight")
+  G.combat = true; fire("PLAYER_REGEN_DISABLED")
+  ns.QueueTracks({ orgri }, false)
+  advance(11)
+  check("the queue waits during a fight", ns.Player.playlist == "Fight" and playing ~= 53198 and #ns.db.upNext == 1)
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(10)
+  ns.ClearQueue()
+
+  -- status line
+  check("status line: no repeated condition", ns.UI.AutoStatus("campfire", "Fire") == "Auto  ·  Campfire  ·  Fire"
+    and ns.UI.AutoStatus("campfire", nil) == "Auto  ·  Campfire")
+  ns.CreatePlaylist("OST - Campfire")
+  check("status line: playlist named after the condition", ns.UI.AutoStatus("campfire", "OST - Campfire") == "Auto  ·  OST - Campfire")
+  ns.DeletePlaylist("OST - Campfire")
+
+  -- library window: views and the smart editor build without errors
+  ns.LibraryUI:Toggle(true)
+  local ok = pcall(function()
+    ns.LibraryUI.view = "album"; ns.LibraryUI:Refresh()
+    ns.LibraryUI.view = "artist"; ns.LibraryUI:Refresh()
+    ns.LibraryUI.view = "tracks"; ns.LibraryUI:Refresh()
+    ns.LibraryUI:OpenSmartEditor(nil)
+  end)
+  check("library views and smart editor", ok)
+  ns.LibraryUI:Toggle(false)
+end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

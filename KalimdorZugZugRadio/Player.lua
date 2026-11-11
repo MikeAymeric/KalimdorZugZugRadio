@@ -74,11 +74,19 @@ local function cancelTimer()
   if timer then timer:Cancel() timer = nil end
 end
 
-local function startTrack()
+-- queued = a track from the "Play next" queue: it plays without moving the playlist's queue,
+-- which goes on from where it was once the queued tracks are over (P.fromQueue).
+local function startTrack(queued)
   local st, pl = getState(P.playlist)
-  st.started = true
-  local track = pl.tracks[st.queue[st.pos]]
-  local explicit = P.explicitNext
+  local track, explicit
+  if queued then
+    track, explicit = queued, true -- chosen by the user: plays even if excluded
+  else
+    st.started = true
+    track = pl.tracks[st.queue[st.pos]]
+    explicit = P.explicitNext
+  end
+  P.fromQueue = queued ~= nil
   P.explicitNext = nil
   if not explicit and ns.IsExcluded(track) then
     -- skip the tracks the user never wants to hear; stop if they all are
@@ -136,15 +144,17 @@ function P:ElapsedInPart()
   return GetTime() - self.startTime
 end
 
--- Starts (or restarts from the beginning) the playlist's current track.
-function P:Play(name)
+-- Starts (or restarts from the beginning) the playlist's current track, or the queued track
+-- being played (queued = a track just taken from the "Play next" queue).
+function P:Play(name, queued)
   name = name or self.playlist
   if not playable(name) or not ns.db.enabled then return false end
+  if not queued and self.fromQueue and name == self.playlist then queued = self.track end
   self:EndZoneBreak()
   self.playlist = name
   self.userStopped = false
   self.afkPaused = false
-  startTrack()
+  startTrack(queued)
   return true
 end
 
@@ -154,7 +164,17 @@ function P:PlayTrack(name, track)
   local pl = ns.GetPlaylist(name)
   resetState(name, indexOf(pl.tracks, track))
   self.explicitNext = true -- chosen by the user: plays even if excluded
+  self.fromQueue = false
   self:Play(name)
+end
+
+-- The next track of the "Play next" queue, if it may play now: not during a fight or the
+-- level-up jingle in automatic mode (the queue waits for the fight to end).
+local function takeQueued()
+  if #ns.db.upNext == 0 then return nil end
+  local R = ns.Rules
+  if ns.db.mode == "auto" and R and (R.FIGHT[R.current] or R.current == "levelup") then return nil end
+  return ns.PopQueue()
 end
 
 -- Moves a playlist that already played to another track: every fight starts with a
@@ -190,6 +210,7 @@ function P:SetPlaylist(name, fresh)
   self.playlist = name
   if self:IsHeld() or not ns.db.enabled then
     local st, pl = getState(name)
+    self.fromQueue = false
     self.track = pl.tracks[st.queue[st.pos]]
     ns.Fire("TRACK_CHANGED", self.track)
     return
@@ -456,6 +477,9 @@ function P:Next(auto)
     end
     ns.SetEpisodePart(t, 1, true) -- episode finished: next time it starts from the beginning
   end
+  self.fromQueue = false
+  local queued = takeQueued()
+  if queued then self:Play(nil, queued) return end
   local st, pl = getState(self.playlist)
   st.pos = st.pos + 1
   if st.pos > #st.queue then
@@ -471,6 +495,13 @@ function P:SkipTrack(dir)
   if not playable(self.playlist) then return end
   takeManualControl()
   if dir > 0 and self.playing then ns.RecordSkip(self.track, self:ElapsedInPart()) end
+  local wasQueued = self.fromQueue
+  self.fromQueue = false
+  if dir > 0 then
+    local queued = takeQueued()
+    if queued then self:Play(nil, queued) return end
+  end
+  if wasQueued and dir < 0 then self:Play() return end -- back to the playlist's own track
   local st = getState(self.playlist)
   st.pos = st.pos + (dir < 0 and -1 or 1)
   if st.pos < 1 then st.pos = #st.queue elseif st.pos > #st.queue then st.pos = 1 end
@@ -486,6 +517,11 @@ function P:Prev()
   local t = self.track
   if t and t.parts and ns.EpisodePart(t) > 1 then
     ns.SetEpisodePart(t, ns.EpisodePart(t) - 1)
+    self:Play()
+    return
+  end
+  if self.fromQueue then -- a queued track: back to the track the playlist was on
+    self.fromQueue = false
     self:Play()
     return
   end
@@ -523,7 +559,7 @@ local function reassert()
     -- skip if a new track just started (e.g. the "dead" condition switched playlist)
     if P.playing and P.playlist and GetTime() - P.startTime > REASSERT_DELAY then
       ns.perfCount("reassert")
-      startTrack()
+      startTrack(P.fromQueue and P.track or nil)
     end
   end)
 end
@@ -560,6 +596,7 @@ ns.On("PLAYLISTS_CHANGED", function(name)
     ns.Rules:Evaluate(true)
     return
   end
+  if P.fromQueue then return end -- a queued track is playing: the queue is rebuilt when it ends
   local pl = ns.GetPlaylist(name)
   local idx = P.track and indexOf(pl.tracks, P.track)
   if idx then

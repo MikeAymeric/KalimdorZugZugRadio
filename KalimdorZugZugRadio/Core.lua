@@ -32,6 +32,8 @@ local DEFAULTS = {
   mode = "auto",   -- "auto" (conditions) or a playlist name (free play)
   shuffle = true,
   playlists = {},  -- name -> { file, file, ... } (file = track id)
+  smartPlaylists = {}, -- name -> { match = "all" | "any", rules = { { field, op, value }, ... } }
+  upNext = {},     -- track ids queued with "Play next" / "Add to queue"
   -- per-character profiles: name -> { assign = {condition -> playlist}, disabled = {condition -> true},
   -- zones = {mapID -> {playlist, name}}, bosses/dungeons = {id -> {playlist, name}}, volumes }.
   -- ns.db.assign/disabled/zones/bosses/dungeons/volumes point to the active profile.
@@ -318,6 +320,12 @@ function ns.PlaylistLabel(name, chat)
   if name == ns.FAV then return (chat and CL or L).FAVORITES end
   if name == ns.HISTORY then return (chat and CL or L).HISTORY end
   if name == ns.TOP then return (chat and CL or L).TOP end
+  local kind = ns.GroupKind(name)
+  if kind then
+    local pl = ns.GetPlaylist(name)
+    local t = pl and pl.tracks[1]
+    return t and ns.GroupLabel(kind, t) or "?"
+  end
   return name
 end
 
@@ -349,6 +357,9 @@ end
 function ns.PlaylistNames()
   local names = {}
   for name in pairs(ns.db.playlists) do names[#names + 1] = name end
+  for name in pairs(ns.db.smartPlaylists) do
+    if not ns.db.playlists[name] then names[#names + 1] = name end
+  end
   table.sort(names, function(a, b) return a:lower() < b:lower() end)
   return names
 end
@@ -380,6 +391,17 @@ function ns.GetPlaylist(name)
       local t = ns.trackById[id]
       if t and not pl.has[id] then table.insert(pl.tracks, t) pl.has[id] = true end
     end
+  elseif ns.GroupKind(name) then
+    pl = { name = name, tracks = {}, has = {} }
+    local kind, key = ns.GroupKind(name)
+    for _, list in ipairs({ ns.tracks, ns.gameTracks }) do
+      for _, t in ipairs(list) do
+        if ns.GroupKey(kind, t) == key then table.insert(pl.tracks, t) pl.has[t.file] = true end
+      end
+    end
+  elseif ns.IsSmart(name) then
+    pl = { name = name, tracks = ns.SmartTracks(ns.db.smartPlaylists[name]), has = {} }
+    for _, t in ipairs(pl.tracks) do pl.has[t.file] = true end
   else
     local ids = ns.db.playlists[name]
     if type(ids) ~= "table" then return nil end
@@ -414,9 +436,12 @@ function ns.FindPlaylist(name)
   for _, loc in pairs(ns.LOCALES) do
     if loc.ALL_KEYWORD and lower == loc.ALL_KEYWORD:lower() then return ns.ALL end
   end
-  if ns.db.playlists[name] then return name end
-  for n in pairs(ns.db.playlists) do
-    if n:lower() == lower then return n end
+  if ns.db.playlists[name] or ns.db.smartPlaylists[name] then return name end
+  if ns.GroupKind(name) and ns.GetPlaylist(name) then return name end
+  for _, store in ipairs({ ns.db.playlists, ns.db.smartPlaylists }) do
+    for n in pairs(store) do
+      if n:lower() == lower then return n end
+    end
   end
 end
 
@@ -436,16 +461,44 @@ function ns.CreatePlaylist(name)
   return name
 end
 
+-- Points every assignment of every profile (conditions, zones, bosses, dungeons) from playlist
+-- `old` to `new` (nil = remove the assignment).
+local function replaceAssignments(old, new)
+  for _, prof in pairs(ns.db.profiles) do
+    if type(prof.assign) == "table" then
+      for key, v in pairs(prof.assign) do
+        if v == old then prof.assign[key] = new end
+      end
+    end
+    for _, field in ipairs({ "zones", "bosses", "dungeons" }) do
+      local map = prof[field]
+      if type(map) == "table" then
+        for id, e in pairs(map) do
+          if type(e) == "table" and e.playlist == old then
+            if new then e.playlist = new else map[id] = nil end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- The table holding a user playlist (plain or smart), or nil.
+local function storeOf(name)
+  if name == nil then return nil end
+  if ns.db.playlists[name] then return ns.db.playlists end
+  if ns.db.smartPlaylists[name] then return ns.db.smartPlaylists end
+end
+
 function ns.RenamePlaylist(old, new)
   new = cleanName(new)
-  if not new or not ns.db.playlists[old] then return nil, "ERR_BAD_NAME" end
+  local store = storeOf(old)
+  if not new or not store then return nil, "ERR_BAD_NAME" end
   if new == old then return new end
   local existing = ns.FindPlaylist(new)
   if existing and existing ~= old then return nil, "ERR_EXISTS" end
-  ns.db.playlists[new], ns.db.playlists[old] = ns.db.playlists[old], nil
-  for key, v in pairs(ns.db.assign) do
-    if v == old then ns.db.assign[key] = new end
-  end
+  store[new], store[old] = store[old], nil
+  replaceAssignments(old, new)
   if ns.db.mode == old then ns.db.mode = new end
   ns.Player:Rename(old, new)
   cache[old] = nil
@@ -454,11 +507,10 @@ function ns.RenamePlaylist(old, new)
 end
 
 function ns.DeletePlaylist(name)
-  if not ns.db.playlists[name] then return end
-  ns.db.playlists[name] = nil
-  for key, v in pairs(ns.db.assign) do
-    if v == name then ns.db.assign[key] = nil end
-  end
+  local store = storeOf(name)
+  if not store then return end
+  store[name] = nil
+  replaceAssignments(name, nil)
   invalidate(name)
   if ns.db.mode == name then ns.SetMode("auto") else ns.Rules:Evaluate(true) end
 end
@@ -491,6 +543,171 @@ function ns.SetManyInPlaylist(name, ids, include)
   end
   invalidate(name)
   ns.Rules:Evaluate()
+end
+
+---------------------------------------------------------------------------
+-- Smart playlists: filled by rules on the tracks' tags and listening data. Like history, they
+-- are recomputed when looked at (ns.InvalidateDynamic), never while they are playing.
+---------------------------------------------------------------------------
+ns.SMART_FIELDS = {
+  { key = "title", kind = "text" }, { key = "artist", kind = "text" }, { key = "album", kind = "text" },
+  { key = "folder", kind = "text" }, { key = "source", kind = "source" }, { key = "plays", kind = "number" },
+  { key = "minutes", kind = "number" }, { key = "favorite", kind = "flag" }, { key = "never", kind = "flag" },
+}
+ns.SMART_OPS = { text = { "has", "not", "is" }, source = { "is", "isnot" }, number = { "ge", "le" }, flag = { "yes", "no" } }
+ns.SMART_SOURCES = { "mine", "game", "podcast" }
+ns.SMART_MAX_RULES = 6
+local FIELD_KIND = {}
+for _, fd in ipairs(ns.SMART_FIELDS) do FIELD_KIND[fd.key] = fd.kind end
+function ns.SmartFieldKind(field) return FIELD_KIND[field] end
+
+function ns.SourceOf(t)
+  return t.game and "game" or t.podcast and "podcast" or "mine"
+end
+
+-- true if track t satisfies rule r. Rules with an empty or invalid value are ignored (true).
+local function matchRule(t, r)
+  local kind = FIELD_KIND[r.field]
+  if kind == "text" then
+    local q = tostring(r.value or ""):lower()
+    if q == "" then return true end
+    local v = tostring(t[r.field] or ""):lower()
+    if r.op == "is" then return v == q end
+    local found = v:find(q, 1, true) ~= nil
+    if r.op == "not" then return not found end
+    return found
+  elseif kind == "source" then
+    if r.value == nil then return true end
+    local same = ns.SourceOf(t) == r.value
+    if r.op == "isnot" then return not same end
+    return same
+  elseif kind == "number" then
+    local n = tonumber(r.value)
+    if not n then return true end
+    local v
+    if r.field == "plays" then
+      local st = ns.db.stats[t.file]
+      v = st and st.plays or 0
+    else
+      v = (tonumber(t.duration) or 0) / 60
+    end
+    if r.op == "le" then return v <= n end
+    return v >= n
+  elseif kind == "flag" then
+    local on
+    if r.field == "favorite" then
+      on = ns.db.favorites[t.file] == true
+    else
+      local st = ns.db.stats[t.file]
+      on = not st or (st.plays or 0) == 0
+    end
+    if r.op == "no" then return not on end
+    return on
+  end
+  return true
+end
+
+-- The tracks matched by a smart playlist definition { match, rules }.
+function ns.SmartTracks(def)
+  local out = {}
+  local rules = type(def) == "table" and type(def.rules) == "table" and def.rules or {}
+  local any = type(def) == "table" and def.match == "any"
+  for _, t in ipairs(ns.everyTrack) do
+    local ok
+    if #rules == 0 then
+      ok = true
+    elseif any then
+      ok = false
+      for _, r in ipairs(rules) do if matchRule(t, r) then ok = true break end end
+    else
+      ok = true
+      for _, r in ipairs(rules) do if not matchRule(t, r) then ok = false break end end
+    end
+    if ok then out[#out + 1] = t end
+  end
+  return out
+end
+
+function ns.IsSmart(name)
+  return name ~= nil and ns.db.smartPlaylists[name] ~= nil and not ns.db.playlists[name]
+end
+
+-- Creates (old = nil) or updates a smart playlist. Returns its name, or nil + error key.
+function ns.SaveSmartPlaylist(old, name, def)
+  name = cleanName(name)
+  if not name then return nil, "ERR_BAD_NAME" end
+  local existing = ns.FindPlaylist(name)
+  if existing and existing ~= old then return nil, "ERR_EXISTS" end
+  if old and old ~= name then
+    if not ns.IsSmart(old) then return nil, "ERR_BAD_NAME" end
+    local renamed, err = ns.RenamePlaylist(old, name)
+    if not renamed then return nil, err end
+  end
+  local rules = {}
+  for _, r in ipairs(type(def) == "table" and type(def.rules) == "table" and def.rules or {}) do
+    if FIELD_KIND[r.field] and #rules < ns.SMART_MAX_RULES then
+      rules[#rules + 1] = { field = r.field, op = r.op, value = r.value }
+    end
+  end
+  ns.db.smartPlaylists[name] = { match = type(def) == "table" and def.match == "any" and "any" or "all", rules = rules }
+  invalidate(name)
+  ns.Rules:Evaluate()
+  return name
+end
+
+---------------------------------------------------------------------------
+-- Albums and artists: virtual playlists "__album:<key>" / "__artist:<key>". They are not
+-- listed in the menus, but can be played and assigned like any other.
+---------------------------------------------------------------------------
+local GROUP_PREFIX = { album = "__album:", artist = "__artist:" }
+
+function ns.GroupKey(kind, t)
+  if kind == "artist" then return (t.artist or ""):lower() end
+  return (t.album or ""):lower() .. " @ " .. (t.folder or "")
+end
+
+function ns.GroupLabel(kind, t)
+  if kind == "artist" then
+    return (t.artist and t.artist ~= "") and t.artist or L.UNKNOWN_ARTIST
+  end
+  if t.album and t.album ~= "" then return t.album end
+  return (t.folder or ""):match("([^/\\]+)$") or L.UNKNOWN_ALBUM
+end
+
+function ns.GroupPlaylistName(kind, t)
+  return GROUP_PREFIX[kind] .. ns.GroupKey(kind, t)
+end
+
+-- "album" | "artist" and the group key, if name is a group playlist.
+function ns.GroupKind(name)
+  if type(name) ~= "string" or name:sub(1, 2) ~= "__" then return nil end
+  for kind, prefix in pairs(GROUP_PREFIX) do
+    if name:sub(1, #prefix) == prefix then return kind, name:sub(#prefix + 1) end
+  end
+end
+
+-- The albums or artists of a track list (podcasts excluded):
+-- { kind, key, name (its playlist), label, artist, various, count, cover, _search }, sorted by label.
+function ns.Groups(tracks, kind)
+  local byKey, out = {}, {}
+  for _, t in ipairs(tracks) do
+    if not t.parts then
+      local key = ns.GroupKey(kind, t)
+      local g = byKey[key]
+      if not g then
+        g = { kind = kind, key = key, name = GROUP_PREFIX[kind] .. key, label = ns.GroupLabel(kind, t),
+              count = 0, artist = t.artist }
+        byKey[key] = g
+        out[#out + 1] = g
+      end
+      g.count = g.count + 1
+      if not g.cover then g.cover = ns.CoverOf(t) end
+      if kind == "album" and g.artist ~= t.artist then g.various = true end
+    end
+  end
+  for _, g in ipairs(out) do g._search = (g.label .. " " .. (g.artist or "")):lower() end
+  table.sort(out, function(a, b) return a.label:lower() < b.label:lower() end)
+  return out
 end
 
 function ns.IsConditionEnabled(key)
@@ -630,6 +847,9 @@ function ns.InvalidateDynamic()
   for name in pairs(dynamicCache) do
     if ns.Player.playlist ~= name then cache[name] = nil end
   end
+  for name in pairs(ns.db.smartPlaylists) do
+    if ns.Player.playlist ~= name then cache[name] = nil end
+  end
 end
 
 function ns.IsFavorite(t) return t and ns.db.favorites[t.file] == true end
@@ -702,6 +922,53 @@ function ns.ShuffleWeights(tracks)
     w[i] = math.max(v, 0.1)
   end
   return w
+end
+
+---------------------------------------------------------------------------
+-- "Play next" queue: tracks played before the playlist goes on (ids in db.upNext).
+---------------------------------------------------------------------------
+ns.QUEUE_MAX = 100
+
+-- front = "Play next" (before what is already queued), otherwise "Add to queue".
+function ns.QueueTracks(tracks, front)
+  local q = ns.db.upNext
+  local pos = 1
+  for _, t in ipairs(tracks) do
+    if t and t.file and #q < ns.QUEUE_MAX then
+      if front then table.insert(q, pos, t.file) pos = pos + 1 else table.insert(q, t.file) end
+    end
+  end
+  ns.Fire("QUEUE_CHANGED")
+end
+
+-- The queued tracks that are still in the library.
+function ns.QueuedTracks()
+  local out = {}
+  for _, id in ipairs(ns.db.upNext) do
+    if ns.trackById[id] then out[#out + 1] = ns.trackById[id] end
+  end
+  return out
+end
+
+function ns.UnqueueTrack(t)
+  local q = ns.db.upNext
+  for i = 1, #q do
+    if q[i] == t.file then table.remove(q, i) ns.Fire("QUEUE_CHANGED") return end
+  end
+end
+
+function ns.ClearQueue()
+  wipe(ns.db.upNext)
+  ns.Fire("QUEUE_CHANGED")
+end
+
+-- Takes the first queued track (dropping ids no longer in the library).
+function ns.PopQueue()
+  local q = ns.db.upNext
+  while #q > 0 do
+    local t = ns.trackById[table.remove(q, 1)]
+    if t then ns.Fire("QUEUE_CHANGED") return t end
+  end
 end
 
 function ns.FormatDuration(sec)
