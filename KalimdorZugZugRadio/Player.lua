@@ -347,6 +347,13 @@ function P:CancelFadeOut()
   if V.fade < 1 or tweens.fade then tween("fade", 1, nil, 1) end
 end
 
+-- For /kzz debug.
+function P:DebugState()
+  return ("playing %s, playlist %s, stopped %s, afk %s, zone break %s, volume x%.2f (cond %.2f duck %.2f fade %.2f)"):format(
+    tostring(self.playing), tostring(self.playlist), tostring(self.userStopped), tostring(self.afkPaused),
+    tostring(self.zoneBreakUntil ~= nil), V.cond * V.duck * V.fade, V.cond, V.duck, V.fade)
+end
+
 -- True when the music must stay silent: stopped by the user, paused while AFK, or during a
 -- zone-music break.
 function P:IsHeld()

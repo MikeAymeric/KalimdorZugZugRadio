@@ -942,6 +942,8 @@ function ns.DebugLines()
     ("  conditions: current %s, zone %s, dungeon %s (%s), encounter %s, last boss %s"):format(
       s(ns.Rules.current), s(ns.CurrentZone() and ns.CurrentZone().id), s(ns.Rules.dungeonID),
       s(ns.Rules.dungeonID and ns.db.seenDungeons[ns.Rules.dungeonID]), s(ns.Rules.encounterID), s(ns.Rules.lastBossID)),
+    "  rules: " .. (ns.Rules.DebugState and ns.Rules:DebugState() or "?"),
+    "  player: " .. (ns.Player.DebugState and ns.Player:DebugState() or "?"),
   }
   local ok, mm = pcall(ns.Minimap.DebugInfo, ns.Minimap)
   table.insert(lines, "  minimap: " .. (ok and mm or ("error: " .. tostring(mm))))
@@ -997,7 +999,8 @@ ns.RegisterEvent("PLAYER_LOGIN", function()
   step("Minimap", function() ns.Minimap:Build() end)
   step("Banner", function() ns.Banner:Build() end)
   step("Rules", function() ns.Rules:Start() end)
-  step("Debug", function() ns.db.lastDebug = ns.DebugLines() end)
+  -- startup state in its own field, so a /kzz debug taken before a /reload isn't overwritten
+  step("Debug", function() ns.db.startupDebug = ns.DebugLines() end)
   if #ns.tracks == 0 and #ns.episodes == 0 then
     ns.Print("MSG_EMPTY_LIBRARY")
   elseif next(ns.db.playlists) == nil then
@@ -1105,6 +1108,7 @@ SlashCmdList.KZZRADIO = function(msg)
     for _, line in ipairs(ns.db.lastPerf) do print(line) end
   elseif cmd == "debug" then
     ns.db.lastDebug = ns.DebugLines()
+    table.insert(ns.db.lastDebug, 1, "taken at " .. (date and date("%Y-%m-%d %H:%M:%S") or "?"))
     for _, line in ipairs(ns.db.lastDebug) do print(line) end
     print("  (saved: /reload to write it to SavedVariables\\KalimdorZugZugRadio.lua)")
   else

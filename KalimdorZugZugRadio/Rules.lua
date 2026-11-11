@@ -165,6 +165,14 @@ local function priority(key)
   return key and ns.PRIORITY[key] or 999
 end
 
+-- For /kzz debug: the raw state flags and what the rules are waiting for.
+function R:DebugState()
+  local on = {}
+  for k, v in pairs(state) do if v then on[#on + 1] = k end end
+  table.sort(on)
+  return ("flags {%s}, pending %s"):format(table.concat(on, " "), tostring(pendingKey))
+end
+
 function R:Reset()
   cancelPending(true)
   self.current = nil

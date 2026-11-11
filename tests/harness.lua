@@ -756,6 +756,35 @@ do
   ns.DeletePlaylist("Lost"); advance(1)
 end
 
+-- death in a dungeon boss fight, ghost run outside, back in and alive: dungeon music again
+do
+  ns.db.fightTail = 8; ns.db.crossfade = true
+  ns.CreatePlaylist("RDgn"); ns.SetInPlaylist("RDgn", "game:8158670", true); ns.Assign("dungeon", "RDgn")
+  ns.CreatePlaylist("RDead"); ns.SetInPlaylist("RDead", "game:53198", true); ns.Assign("dead", "RDead")
+  ns.CreatePlaylist("RFight"); ns.SetManyInPlaylist("RFight", {"music\\c.mp3"}, true); ns.Assign("combat", "RFight")
+  G.instance = "party"; G.instanceName = "Ragefire Chasm"; G.instanceID = 389
+  fire("PLAYER_ENTERING_WORLD", false, false); advance(6)
+  check("death test: dungeon music", ns.Rules.current == "dungeon")
+  ns.CreatePlaylist("RBoss"); ns.SetInPlaylist("RBoss", "game:53198", true); ns.Assign("boss", "RBoss")
+  G.combat = true; fire("ENCOUNTER_START", 1443, "Oggleflint", 1, 5); fire("PLAYER_REGEN_DISABLED"); advance(3)
+  check("death test: boss music", ns.Player.playlist == "RBoss")
+  G.dead = true; fire("PLAYER_DEAD"); advance(0.5); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(1); fire("ENCOUNTER_END", 1443, "Oggleflint", 1, 5, 0); advance(12)
+  check("dead in the fight: dead music", ns.Rules.current == "dead" and ns.Player.playlist == "RDead")
+  fire("PLAYER_ALIVE"); advance(2) -- released: ghost
+  G.instance = "none"; G.instanceName = nil; G.instanceID = nil
+  fire("PLAYER_ENTERING_WORLD", false, false); advance(30)
+  check("ghost outside the dungeon: still dead music", ns.Player.playlist == "RDead")
+  G.instance = "party"; G.instanceName = "Ragefire Chasm"; G.instanceID = 389
+  fire("PLAYER_ENTERING_WORLD", false, false); advance(1)
+  G.dead = false; fire("PLAYER_UNGHOST"); advance(10)
+  check("alive again in the dungeon: dungeon music, still automatic", ns.Rules.current == "dungeon"
+    and ns.Player.playlist == "RDgn" and ns.db.mode == "auto" and math.abs(tonumber(musicVolume) - 0.8) < 0.001)
+  for _, n in ipairs({ "RDgn", "RDead", "RFight", "RBoss" }) do ns.DeletePlaylist(n) end
+  G.instance = "none"; G.instanceName = nil; G.instanceID = nil
+  fire("PLAYER_ENTERING_WORLD", false, false)
+  ns.db.fightTail = 4; ns.db.crossfade = false; advance(6)
+end
+
 -- key bindings
 check("binding names defined", BINDING_HEADER_KZZR == "Kalimdor ZugZug Radio" and BINDING_NAME_KZZR_PLAY ~= nil)
 local v0 = ns.Player:GetVolume(); KZZR_Binding("voldown")

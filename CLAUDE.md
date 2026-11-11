@@ -141,7 +141,7 @@ v0.4.0 (git tag) was confirmed working in-game by the user on 2026-11-10: player
 - **Some modern widget methods don't exist.** `Slider:SetObeyStepDrag` is missing (it broke the library window). Guard optional methods with `if obj.Method then`, and mark them absent in the harness stubs.
 - **The minimap button needs** a frame level above `Minimap:GetFrameLevel()`, or it renders underneath.
 - **`Settings.OpenToCategory` may silently not show the panel.** `ns.Settings:Open()` tries several methods, falls back to a standalone window, and records the attempts in `KZZR_DB.lastSettingsOpen`.
-- **For diagnosis**, `KZZR_DB.startupErrors` and `KZZR_DB.lastDebug` are written to `WTF\Account\<acct>\SavedVariables\KalimdorZugZugRadio.lua` on `/reload`, so read that file instead of asking the user to copy chat.
+- **For diagnosis**, `KZZR_DB.startupErrors`, `KZZR_DB.lastDebug` (the last manual `/kzz debug`, with a timestamp and the rules' flags/pending key and the player's state) and `KZZR_DB.startupDebug` (taken at login; separate since 1.0 so a reload doesn't overwrite a manual debug) are written to `WTF\Account\<acct>\SavedVariables\KalimdorZugZugRadio.lua` on `/reload`, so read that file instead of asking the user to copy chat.
 - **Deploying:** the user's game install is a copy, so after code changes, copy the changed `.lua`/`.toc`/`.xml` files to the game's AddOns copy (the path is in Claude's local memory, not in the repo). Never copy over `music\`, `covers\` or `Library.lua` there.
 
 Still unverified: whether non-ASCII file paths play (the import script avoids them by renaming).
