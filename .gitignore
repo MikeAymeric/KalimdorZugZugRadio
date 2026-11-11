@@ -19,3 +19,4 @@ Desktop.ini
 
 # Release packages
 dist/
+tools/.font-cache/

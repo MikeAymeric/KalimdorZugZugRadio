@@ -51,7 +51,7 @@ local function playlistMenu(root, isSelected, select)
   ns.StyleMenuItem(root:CreateRadio(L.NONE, function() return isSelected(nil) end, function() select(nil) end))
   for _, name in ipairs(ns.AllPlaylistNames()) do
     ns.StyleMenuItem(root:CreateRadio(("%s (%d)"):format(ns.PlaylistLabel(name), #ns.GetPlaylist(name).tracks),
-      function() return isSelected(name) end, function() select(name) end), ns.HasCJK(name))
+      function() return isSelected(name) end, function() select(name) end), ns.TextFont(name))
   end
 end
 
@@ -96,7 +96,7 @@ local function build(p)
     for _, name in ipairs(ns.ProfileNames()) do
       ns.StyleMenuItem(root:CreateRadio(name == ns.DEFAULT_PROFILE and L.PROFILE_DEFAULT or name,
         function() return ns.profileName == name end,
-        function() ns.SetCharacterProfile(name) S:Refresh() S:RefreshMenus() end), ns.HasCJK(name))
+        function() ns.SetCharacterProfile(name) S:Refresh() S:RefreshMenus() end), ns.TextFont(name))
     end
     root:CreateDivider()
     ns.StyleMenuItem(root:CreateButton(L.PROFILE_NEW, function() ns.NewCharacterProfile() S:Refresh() S:RefreshMenus() end))
@@ -111,7 +111,7 @@ local function build(p)
   local langLabel = text(c, "GameFontNormal")
   langLabel:SetPoint("TOPLEFT", 20, -262)
   langLabel:SetText(L.LANGUAGE)
-  -- CJK language names always use the addon font, so they are readable on any client
+  -- CJK language names always use a bundled font, so they are readable on any client
   p.lang = ns.MakeDropdown(c, 200, L.LANG_AUTO, function(_, root)
     ns.StyleMenuItem(root:CreateRadio(L.LANG_AUTO,
       function() return ns.db.lang == nil end,
@@ -120,7 +120,7 @@ local function build(p)
     for _, code in ipairs(ns.LANG_ORDER) do
       ns.StyleMenuItem(root:CreateRadio(ns.LANGUAGE_NAMES[code],
         function() return ns.db.lang == code end,
-        function() ns.SetLanguage(code) S:Refresh() end), ns.CJK_LANG[code])
+        function() ns.SetLanguage(code) S:Refresh() end), code == "koKR" and "ko" or ns.CJK_LANG[code])
     end
   end)
   if p.lang then p.lang:SetPoint("LEFT", langLabel, "RIGHT", 12, 0) end
@@ -181,7 +181,7 @@ local function build(p)
         for _, id in ipairs(ids) do
           local assigned = ns.db.bosses[id] and ns.db.bosses[id].playlist
           local entry = bosses:CreateButton(ns.db.seenBosses[id] .. (assigned and ("  -  " .. ns.PlaylistLabel(assigned)) or ""))
-          ns.StyleMenuItem(entry, ns.HasCJK(ns.db.seenBosses[id]))
+          ns.StyleMenuItem(entry, ns.TextFont(ns.db.seenBosses[id]))
           playlistMenu(entry, function(name) return (ns.db.bosses[id] and ns.db.bosses[id].playlist) == name end,
             function(name) ns.AssignBoss(id, name) end)
         end

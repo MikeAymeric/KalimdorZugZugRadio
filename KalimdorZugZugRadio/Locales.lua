@@ -4,14 +4,17 @@
 --         (chat uses the client font and would show empty boxes).
 local ADDON, ns = ...
 
-ns.LANG_ORDER = { "enUS", "frFR", "deDE", "esES", "esMX", "ptBR", "itIT", "ruRU", "zhCN", "zhTW", "jaJP" }
+ns.LANG_ORDER = { "enUS", "frFR", "deDE", "esES", "esMX", "ptBR", "itIT", "ruRU", "zhCN", "zhTW", "jaJP", "koKR" }
 ns.LANGUAGE_NAMES = {
   enUS = "English", frFR = "Français", deDE = "Deutsch", esES = "Español (EU)", esMX = "Español (AL)",
-  ptBR = "Português (BR)", itIT = "Italiano", ruRU = "Русский", zhCN = "简体中文", zhTW = "繁體中文", jaJP = "日本語",
+  ptBR = "Português (BR)", itIT = "Italiano", ruRU = "Русский", zhCN = "简体中文", zhTW = "繁體中文", jaJP = "日本語", koKR = "한국어",
 }
 local CJK = { zhCN = true, zhTW = true, koKR = true, jaJP = true }
 ns.CJK_LANG = CJK
-ns.CJK_FONT_PATH = "Interface\\AddOns\\" .. ADDON .. "\\fonts\\MPLUS1p-Regular.ttf"
+-- Bundled fonts: KZZR Sans (M+ 1p plus Noto symbols, built by tools/build_fonts.py: Japanese, Chinese
+-- kanji, Greek, Cyrillic, symbols) and Nanum Gothic (Korean hangul).
+ns.CJK_FONT_PATH = "Interface\\AddOns\\" .. ADDON .. "\\fonts\\KZZRSans-Regular.ttf"
+ns.KO_FONT_PATH = "Interface\\AddOns\\" .. ADDON .. "\\fonts\\NanumGothic-Regular.ttf"
 
 local LOCALES = {}
 ns.LOCALES = LOCALES
@@ -1415,6 +1418,144 @@ LOCALES.jaJP = {
   MSG_SETTINGS_COMBAT = "戦闘中は設定を開けません",
 }
 
+LOCALES.koKR = {
+  SIT_boss = "보스", SIT_elite = "정예 / 희귀", SIT_combat = "전투", SIT_flight = "비행",
+  SIT_campfire = "모닥불", SIT_dungeon = "던전", SIT_town = "마을 / 휴식", SIT_idle = "조건 없음",
+  ALL_LIBRARY = "전체 라이브러리", ALL_KEYWORD = "전체",
+  ERR_BAD_NAME = "잘못된 이름입니다", ERR_EXISTS = "같은 이름의 재생 목록이 이미 있습니다",
+  MSG_EMPTY_LIBRARY = "라이브러리가 비어 있습니다. music/ 폴더에 음악을 넣고 tools/import_music.py를 실행하세요.",
+  MSG_NO_PLAYLISTS = "라이브러리에 %d곡이 있습니다. /kzz lib에서 재생 목록을 만들고 조건에 지정하세요.",
+  MSG_MUSIC_DISABLED = "|cffff4040게임 음악이 꺼져 있습니다|r: 설정 > 소리에서 켜야 라디오를 들을 수 있습니다.",
+  MSG_PLAYMUSIC_ERROR = "PlayMusic 오류: %s",
+  MSG_PLAYLIST_NOT_FOUND = "재생 목록 \"%s\"을(를) 찾을 수 없습니다",
+  MSG_SHUFFLE = "무작위 재생: %s",
+  MSG_PLAYER_LOCKED = "플레이어를 고정했습니다", MSG_PLAYER_UNLOCKED = "플레이어 고정을 해제했습니다",
+  MSG_MINIMAP_HIDDEN = "미니맵 버튼을 숨겼습니다 (/kzz minimap으로 다시 표시)",
+  MSG_MINIMAP_SHOWN = "미니맵 버튼을 표시했습니다",
+  MSG_LANG_SET = "언어: %s. /reload를 입력하면 적용됩니다.",
+  MSG_LANG_LIST = "사용 가능한 언어: %s (auto = 게임 언어)",
+  STATUS_LINE = "모드: %s, %s, 무작위 재생: %s", MODE_CONDITIONS = "조건",
+  RADIO_ENABLED = "라디오 켜짐", RADIO_DISABLED = "라디오 꺼짐", ON = "켜짐", OFF = "꺼짐",
+  EMPTY_SUFFIX = " (비어 있음)", STATUS_COUNTS = "%d곡, 재생 목록 %d개",
+  HELP_1 = "/kzz - 플레이어 표시/숨기기;  /kzz lib - 라이브러리, 재생 목록, 조건",
+  HELP_2 = "/kzz play | stop | next | prev | shuffle",
+  HELP_3 = "/kzz on | off - 라디오 켜기/끄기",
+  HELP_4 = "/kzz auto - 조건에 따라 음악 재생",
+  HELP_5 = "/kzz playlist <이름|전체> - 조건을 무시하고 재생 목록 재생",
+  HELP_6 = "/kzz status - 활성 조건과 지정된 재생 목록",
+  HELP_7 = "/kzz lock - 플레이어 고정/해제;  /kzz reset - 위치 초기화",
+  HELP_8 = "/kzz minimap - 미니맵 버튼 표시/숨기기",
+  HELP_9 = "/kzz lang <코드|auto> - 애드온 언어",
+  PLAYLIST = "재생 목록", AUTO_CONDITIONS = "자동 (조건)", MANAGE_LIBRARY = "라이브러리 관리...",
+  LIBRARY = "라이브러리", TT_LIBRARY = "재생 목록과 곡",
+  TT_PREV = "이전 곡 (또는 처음부터)", TT_PLAY = "재생 / 정지 (곡은 처음부터 재생됩니다)",
+  TT_NEXT = "다음 곡", SHUFFLE = "무작위", TT_SHUFFLE = "무작위 순서",
+  NO_TRACK = "곡 없음", HINT_EMPTY_LIBRARY = "라이브러리가 비어 있습니다: tools/import_music.py를 실행하세요",
+  HINT_NO_PLAYLIST = "활성 조건에 재생 목록이 없습니다: \"라이브러리\"를 누르세요",
+  STATUS_RADIO_OFF = "라디오 꺼짐", STATUS_AUTO = "자동", ZONE_MUSIC = "지역 음악", STATUS_FREE = "자유 재생",
+  LIB_TITLE = "Kalimdor ZugZug Radio  -  라이브러리", PLAYLISTS = "재생 목록",
+  CREATE = "만들기", TT_CREATE = "위에 입력한 이름으로 새 재생 목록을 만듭니다",
+  RENAME = "이름 변경", TT_RENAME = "선택한 재생 목록의 이름을 변경합니다",
+  DELETE = "삭제", CONFIRM = "정말요?", TT_DELETE = "선택한 재생 목록을 삭제합니다 (두 번 클릭)",
+  PLAY_THIS = "이 재생 목록 재생", TT_PLAY_THIS = "자유 재생: \"자동\"으로 돌아갈 때까지 조건을 무시합니다",
+  BACK_AUTO = "자동으로 돌아가기", TT_BACK_AUTO = "오른쪽에서 지정한 조건에 따라 다시 음악이 재생됩니다",
+  TRACKS_HEADER_USER = "곡  -  체크하면 \"%s\"에 추가",
+  TRACKS_HEADER_ALL = "곡  -  전체 라이브러리 (재생 목록을 만들면 선택할 수 있습니다)",
+  SEARCH_HINT = "제목, 아티스트, 폴더 검색...", ONLY_IN = "재생 목록에 있는 곡만",
+  ADD_VISIBLE = "보이는 곡 모두 추가", TT_ADD_VISIBLE = "목록에 보이는 모든 곡을 재생 목록에 추가합니다 (검색으로 거를 수 있습니다. 예: 폴더 이름)",
+  REMOVE_VISIBLE = "보이는 곡 모두 제거", TT_REMOVE_VISIBLE = "목록에 보이는 모든 곡을 재생 목록에서 제거합니다",
+  CONDITIONS = "조건", CONDITIONS_HINT = "위에서부터 순서대로, 처음으로 활성화된(초록색) 조건이 우선합니다.",
+  NONE = "-  없음  -", LANGUAGE = "언어", LANG_AUTO = "자동 (게임 언어)",
+  TT_PLAYING = "재생 중: ", TT_STOPPED = "정지됨: ", TT_AUTO = "자동: ", TT_FREE = "자유 재생: ",
+  TT_LEFT = "왼쪽 클릭: 플레이어", TT_RIGHT = "오른쪽 클릭: 라이브러리",
+  TT_SHIFT = "Shift+클릭: 재생/정지", TT_DRAG = "드래그: 버튼 이동",
+  BIND_PLAY = "재생 / 정지",
+  BIND_NEXT = "다음 곡 (또는 팟캐스트의 다음 파트)",
+  BIND_PREV = "이전 곡 (또는 팟캐스트의 이전 파트)",
+  BIND_SKIP = "다음 곡 (에피소드 건너뛰기)",
+  BIND_VOLUP = "음량 높이기",
+  BIND_VOLDOWN = "음량 낮추기",
+  BIND_PLAYER = "플레이어 표시 / 숨기기",
+  BIND_LIBRARY = "라이브러리 열기",
+  BIND_FAVORITE = "재생 중인 곡을 즐겨찾기",
+  OPT_AFK = "자리 비움 중 일시 정지",
+  OPT_DUCK = "동영상과 대화 중 음악 낮추기",
+  OPT_COMPACT = "작은 플레이어",
+  FAVORITES = "즐겨찾기",
+  HISTORY = "최근 재생한 곡",
+  TOP = "많이 들은 곡",
+  FAV_ADD = "즐겨찾기에 추가",
+  FAV_REMOVE = "즐겨찾기에서 제거",
+  EXCLUDE = "이 곡을 다시 재생하지 않기",
+  INCLUDE = "이 곡을 다시 재생하기",
+  TT_FAVORITE = "즐겨찾기 (클릭하여 전환)",
+  PLAYS_FMT = "%d회 재생",
+  MSG_STATS = "재생 시간: %s, 재생한 곡: %d",
+  HELP_12 = "/kzz stats - 재생 통계",
+  COND_VOLUME = "음량: %d%%",
+  BOSS_SPECIFIC = "특정 보스",
+  BOSS_NONE_SEEN = "(아직 만난 보스가 없습니다)",
+  TT_COMPACT = "작은 플레이어",
+  TT_EXPAND = "전체 플레이어",
+  TT_PREV_EPISODE = "이전 에피소드",
+  TT_NEXT_EPISODE = "다음 에피소드",
+  TT_PREV_PART = "2:30 뒤로 (이전 파트)",
+  TT_NEXT_PART = "2:30 앞으로 (다음 파트)",
+  TT_VOLUME = "음악 음량: %d%%",
+  SIT_levelup = "레벨 업",
+  SIT_pvp = "전장 / 투기장",
+  SIT_dead = "사망 / 유령",
+  SIT_fishing = "낚시",
+  SIT_swimming = "수영",
+  SIT_mounted = "탈것 (지상)",
+  SIT_zone = "지역 음악",
+  SIT_night = "밤",
+  OPT_CROSSFADE = "조건이 바뀔 때 페이드",
+  OPT_BANNER = "대화창 위에 \"재생 중\" 배너 표시",
+  NOW_PLAYING = "재생 중",
+  PROFILE = "프로필",
+  PROFILE_DEFAULT = "기본 (모든 캐릭터)",
+  PROFILE_NEW = "이 캐릭터용 새 프로필",
+  PROFILE_DELETE = "이 프로필 삭제",
+  MSG_PROFILE_SET = "프로필: %s",
+  ZONE_LINE = "지역 음악: 그 지역에 있는 동안 \"지역 음악\"에서 재생 목록을 지정하세요. 현재 지역: %s  ·  전용 음악이 있는 지역: %d",
+  ZONE_UNKNOWN = "알 수 없음",
+  EXPORT = "내보내기",
+  IMPORT = "가져오기",
+  TT_EXPORT = "이 텍스트를 복사(Ctrl+C)해서 공유하세요. 게임 음악은 누구나 들을 수 있지만, 직접 넣은 파일은 상대방에게도 있을 때만 재생됩니다.",
+  TT_IMPORT = "공유받은 재생 목록을 붙여넣고(Ctrl+V) 확인을 누르세요.",
+  EXPORT_TITLE = "재생 목록 내보내기",
+  IMPORT_TITLE = "재생 목록 가져오기",
+  OK = "확인",
+  MSG_IMPORTED = "재생 목록 \"%s\"을(를) 가져왔습니다: %d / %d곡을 찾았습니다",
+  MSG_IMPORT_BAD = "이 텍스트는 올바른 재생 목록이 아닙니다",
+  HELP_11 = "/kzz perf [reset] - 애드온의 CPU 및 메모리 사용량",
+  OPT_CLASSIC = "클래식 스타일 플레이어",
+  FREE_PLAY_WARNING = "자유 재생 중 (%s): 조건이 무시됩니다.",
+  PODCASTS = "팟캐스트",
+  PART_FMT = "파트 %d/%d",
+  TRACKS_HEADER_PODCAST = "팟캐스트  -  최신 에피소드 (마지막으로 들은 곳부터 재생)",
+  GAME_MUSIC = "WoW 음악",
+  SOURCE_ALL = "전체",
+  SOURCE_MINE = "내 음악",
+  TRACKS_HEADER_GAME = "곡  -  게임 음악 (내 재생 목록을 선택하면 추가할 수 있습니다)",
+  -- settings
+  SETTINGS = "설정",
+  MENU_SETTINGS = "설정...",
+  SECTION_GENERAL = "일반",
+  OPT_ENABLED = "라디오 켜짐",
+  OPT_SHUFFLE = "무작위 재생",
+  OPT_MINIMAP = "미니맵 버튼 표시",
+  OPT_LOCK = "플레이어 창 고정",
+  LANG_RELOAD_HINT = "언어를 바꾸려면 UI를 다시 불러와야 합니다.",
+  RELOAD = "UI 다시 불러오기",
+  COND_SETTINGS_HINT = "사용할 조건에 체크하고 각각 재생 목록을 선택하세요. 위에서부터 순서대로, 처음으로 활성화된 조건이 우선합니다.",
+  OPEN_LIBRARY = "라이브러리 열기",
+  TT_CTRL = "Ctrl+클릭: 설정",
+  HELP_10 = "/kzz config - 애드온 설정",
+  MSG_SETTINGS_COMBAT = "전투 중에는 설정을 열 수 없습니다",
+}
+
 ---------------------------------------------------------------------------
 -- Language selection
 ---------------------------------------------------------------------------
@@ -1440,24 +1581,54 @@ function ns.InitLanguage(pref)
   local client = clientLocale()
   local lang = (pref and LOCALES[pref]) and pref or (LOCALES[client] and client or "enUS")
   ns.lang = lang
-  -- Addon font only for a CJK language the client lacks.
-  -- On a zh/ko client the game fonts are used (except for Japanese, which WoW doesn't ship).
-  ns.useAddonFont = CJK[lang] and (lang == "jaJP" or not CJK[client]) or false
+  -- Addon font only for a CJK language the client's fonts lack: Japanese always (WoW has no
+  -- Japanese client), Korean unless the client is Korean, Chinese unless the client is Chinese.
+  local covered = (lang == "koKR" and client == "koKR")
+    or ((lang == "zhCN" or lang == "zhTW") and (client == "zhCN" or client == "zhTW"))
+  ns.useAddonFont = CJK[lang] and not covered or false
+  ns.uiFont = ns.useAddonFont and (lang == "koKR" and "ko" or "cjk") or nil -- see ns.Font
   ns.clientHasCJK = CJK[client] or false
+  ns.clientLocale = client
   ns.chatLang = ns.useAddonFont and "enUS" or lang
 end
 
--- User texts (titles, artists, folders, playlist names) may contain Japanese/Chinese/Korean
--- characters even with an English UI: UTF-8 lead bytes E3-ED.
-local CJK_PATTERN = "[\227-\237][\128-\191][\128-\191]"
-function ns.HasCJK(text)
-  return type(text) == "string" and not ns.clientHasCJK and text:find(CJK_PATTERN) ~= nil
+-- User texts (titles, artists, folders, playlist names) may contain characters the game fonts
+-- lack, even with an English UI. Matched on UTF-8 bytes (Lua 5.1 has no Unicode classes).
+local HANGUL = { -- syllables U+AC00-D7A3, compatibility jamo U+3130-318F
+  "\234[\176-\191][\128-\191]", "[\235\236][\128-\191][\128-\191]", "\237[\128-\158][\128-\191]",
+  "\227\132[\176-\191]", "\227\133[\128-\191]", "\227\134[\128-\143]",
+}
+local CJK_PATTERN = "[\227-\237][\128-\191][\128-\191]" -- U+3000-DFFF: kana, kanji, CJK punctuation
+local SYMBOLS = { -- in KZZR Sans but not in the Latin game fonts
+  "[\196\197][\128-\191]",                           -- Latin Extended-A (ō, ł, ...)
+  "\205[\176-\191]", "[\206\207][\128-\191]",        -- Greek
+  "\226\129[\176-\191]", "\226[\130-\191][\128-\191]", -- U+2070-2FFF: arrows, shapes, stars (not ’ … —)
+  "\239[\188-\191][\128-\191]",                      -- fullwidth forms (～ ！ ：)
+}
+local CYRILLIC = "[\208-\211][\128-\191]"
+
+local function findAny(text, patterns)
+  for i = 1, #patterns do
+    if text:find(patterns[i]) then return true end
+  end
+  return false
 end
 
--- SetText that picks the font: the addon's if the text contains CJK characters.
+-- Which bundled font a user text needs: "ko" (Nanum Gothic), "cjk" (KZZR Sans) or false (game font).
+-- Hangul wins: Nanum Gothic has no kana, but Korean titles rarely mix in Japanese.
+function ns.TextFont(text)
+  if type(text) ~= "string" or not text:find("[\128-\255]") then return false end
+  if ns.clientLocale ~= "koKR" and findAny(text, HANGUL) then return "ko" end
+  if ns.clientHasCJK then return false end -- zh/ko game fonts cover kana, kanji and symbols
+  if text:find(CJK_PATTERN) or findAny(text, SYMBOLS) then return "cjk" end
+  if ns.clientLocale ~= "ruRU" and text:find(CYRILLIC) then return "cjk" end
+  return false
+end
+
+-- SetText that picks the font: a bundled one if the text needs it (see ns.TextFont).
 -- Note: SetFontObject resets the color, so re-apply it afterwards.
 function ns.SetText(fs, text, template)
-  local want = ns.FontObject(template, ns.HasCJK(text))
+  local want = ns.FontObject(template, ns.TextFont(text))
   if want and fs.kzzFont ~= want then
     fs:SetFontObject(want)
     fs.kzzFont = want
@@ -1471,15 +1642,19 @@ end
 local fontCache = {}
 
 -- Returns the name of a font object to use instead of `template`.
+-- force: "ko" = Nanum Gothic, "cjk"/true = KZZR Sans; without it, the UI language's font (ns.uiFont).
 function ns.Font(template, force)
-  if not (ns.useAddonFont or force) or not _G[template] or not CreateFont then return template end
-  local name = "KZZR_" .. template
+  if force == true then force = "cjk" end
+  force = force or ns.uiFont
+  if not force or not _G[template] or not CreateFont then return template end
+  local name = (force == "ko" and "KZZR_KO_" or "KZZR_") .. template
   if fontCache[name] == nil then
     local base = _G[template]
     local obj = CreateFont(name)
     obj:CopyFontObject(base)
     local _, size, flags = base:GetFont()
-    local ok, res = pcall(obj.SetFont, obj, ns.CJK_FONT_PATH, size or 12, flags or "")
+    local path = force == "ko" and ns.KO_FONT_PATH or ns.CJK_FONT_PATH
+    local ok, res = pcall(obj.SetFont, obj, path, size or 12, flags or "")
     fontCache[name] = ok and res ~= false
   end
   return fontCache[name] and name or template

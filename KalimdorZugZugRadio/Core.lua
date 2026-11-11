@@ -151,7 +151,7 @@ function ns.ShowTooltip(owner, anchor, lines)
     local fs = _G["KZZR_TooltipTextLeft" .. i]
     if fs then
       local template = i == 1 and "GameTooltipHeaderText" or "GameTooltipText"
-      local fo = ns.FontObject(template, ns.HasCJK(fs:GetText()))
+      local fo = ns.FontObject(template, ns.TextFont(fs:GetText()))
       if fo then fs:SetFontObject(fo) end
     end
   end

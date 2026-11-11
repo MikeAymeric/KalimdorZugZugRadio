@@ -25,7 +25,7 @@ WoW Forever 1.60.1 (Interface 16001)
 
 ## License
 
-MIT (the bundled M+ 1p font is under the SIL Open Font License 1.1)
+MIT (the bundled KZZR Sans (M+ 1p + Noto symbols) and Nanum Gothic fonts are under the SIL Open Font License 1.1)
 
 ## Source / issues
 
@@ -47,7 +47,8 @@ It plays your own playlists based on what your character is doing: a boss fight,
 - **Player**: cover, title, remaining time, controls, volume slider, favourites, compact mode and a classic WoW look.
 - **Library**: playlists, search, favourites, "never play this track", recently played, most played, export and import playlists as text.
 - **Comfort**: key bindings, minimap button, "Now playing" banner, fade between conditions, lower music during cinematics, pause when AFK, per-character profiles.
-- **11 languages**: English, Français, Deutsch, Español (EU), Español (AL), Português (BR), Italiano, Русский, 简体中文, 繁體中文, 日本語.
+- **12 languages**: English, Français, Deutsch, Español (EU), Español (AL), Português (BR), Italiano, Русский, 简体中文, 繁體中文, 日本語, 한국어.
+- **Titles in any script**: Japanese, Chinese and Korean titles, and symbols like ★ ♪ ❤ ✿ ➡, are readable on any client thanks to the bundled fonts.
 
 ### Getting started
 

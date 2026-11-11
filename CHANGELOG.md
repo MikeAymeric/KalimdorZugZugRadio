@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- **Korean translation** (한국어), with the bundled Nanum Gothic font on non-Korean clients.
+- **Korean titles** are readable: Nanum Gothic is bundled for hangul.
+- Symbols the game font lacks (arrows, stars, Greek, fullwidth punctuation, ō...) use the bundled font instead of showing boxes.
+- The bundled font is now **KZZR Sans**: M+ 1p plus about 2,600 symbols from the Noto fonts (❤ ✿ ☀ ⚡ ✨ ➡ ㊙ ...).
+- The dropdowns show Japanese and Korean playlist names with the right font.
+- The import script writes titles in composed form (NFC), so names from macOS files show ジ instead of シ + ゛. Run it again to fix an existing library.
+
 ## 0.6.2
 
 - **Import music.bat** is replaced by **Import music.py** (CurseForge does not accept .bat files). Double-click it to import your music and podcasts.

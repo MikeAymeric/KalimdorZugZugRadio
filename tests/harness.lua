@@ -553,7 +553,22 @@ check("addon font created", ns.Font("GameFontNormalSmall") == "KZZR_GameFontNorm
 clientLocale = "zhCN"; ns.InitLanguage(nil)
 check("zhCN on a zhCN client: game font", ns.lang == "zhCN" and not ns.useAddonFont and ns.chatLang == "zhCN")
 clientLocale = "koKR"; ns.InitLanguage(nil)
-check("koKR (not translated) -> English", ns.lang == "enUS")
+check("koKR client -> Korean with the game font", ns.lang == "koKR" and ns.L.SIT_boss == "보스" and not ns.useAddonFont
+  and ns.chatLang == "koKR" and ns.Font("GameFontNormalSmall") == "GameFontNormalSmall")
+clientLocale = "enUS"; ns.InitLanguage("koKR")
+check("Korean on an enUS client: Nanum Gothic, chat in English", ns.useAddonFont and ns.uiFont == "ko"
+  and ns.chatLang == "enUS" and ns.CL.SIT_boss == "Boss"
+  and ns.Font("GameFontNormalSmall") == "KZZR_KO_GameFontNormalSmall"
+  and ns.Font("GameFontNormalSmall", ns.TextFont("夜に駆ける")) == "KZZR_GameFontNormalSmall")
+clientLocale = "zhCN"; ns.InitLanguage("koKR")
+check("Korean on a Chinese client still uses Nanum Gothic", ns.uiFont == "ko")
+clientLocale = "koKR"; ns.InitLanguage("zhCN")
+check("Chinese on a Korean client uses KZZR Sans", ns.uiFont == "cjk")
+clientLocale = "koKR"; ns.InitLanguage("jaJP")
+check("Japanese on a Korean client uses KZZR Sans", ns.uiFont == "cjk")
+clientLocale = "enUS"; ns.InitLanguage(nil)
+SlashCmdList.KZZRADIO("lang ko"); check("/kzz lang ko", ns.db.lang == "koKR")
+SlashCmdList.KZZRADIO("lang auto")
 ns.InitLanguage("esMX")
 check("esMX inherits from esES", ns.L.SIT_campfire == "Fogata" and ns.L.SIT_combat == "Combate")
 clientLocale = "enUS"; ns.InitLanguage(nil)
@@ -562,10 +577,32 @@ SlashCmdList.KZZRADIO("lang auto"); check("/kzz lang auto", ns.db.lang == nil)
 SlashCmdList.KZZRADIO("help")
 SlashCmdList.KZZRADIO("debug")
 clientLocale = "enUS"; ns.InitLanguage(nil)
-check("Japanese text on an enUS client -> addon font", ns.HasCJK("夜に駆ける") and not ns.HasCJK("Ado - Café"))
-check("CJK font forced even with an English UI", ns.Font("GameFontHighlightSmall", ns.HasCJK("ナニダト")) == "KZZR_GameFontHighlightSmall")
+check("Japanese text on an enUS client -> addon font", ns.TextFont("夜に駆ける") == "cjk" and not ns.TextFont("Ado - Café"))
+check("CJK font forced even with an English UI", ns.Font("GameFontHighlightSmall", ns.TextFont("ナニダト")) == "KZZR_GameFontHighlightSmall")
+check("Latin punctuation keeps the game font", not ns.TextFont("Don’t Stop — Live…") and not ns.TextFont("Plain ASCII"))
+check("symbols the game font lacks -> KZZR Sans", ns.TextFont("↑↓←→BBAB") == "cjk" and ns.TextFont("Love ❤ ✨") == "cjk" and ns.TextFont("k1ll◎iLL") == "cjk"
+  and ns.TextFont("ΛSHES") == "cjk" and ns.TextFont("Shōwa 59") == "cjk" and ns.TextFont("ＡＢＣ") == "cjk")
+check("Cyrillic -> KZZR Sans", ns.TextFont("Кино") == "cjk")
+check("Korean hangul -> Nanum Gothic", ns.TextFont("뉴진스") == "ko" and ns.TextFont("NewJeans (뉴진스) - Hype Boy") == "ko"
+  and ns.TextFont("ㅋㅋ") == "ko")
+check("Korean font object", ns.Font("GameFontHighlightSmall", "ko") == "KZZR_KO_GameFontHighlightSmall"
+  and ns.Font("GameFontHighlightSmall", true) == "KZZR_GameFontHighlightSmall")
+do
+  local fs = UIParent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  ns.SetText(fs, "뉴진스", "GameFontHighlightSmall")
+  local ko = fs.kzzFont == _G.KZZR_KO_GameFontHighlightSmall
+  ns.SetText(fs, "夜に駆ける", "GameFontHighlightSmall")
+  local ja = fs.kzzFont == _G.KZZR_GameFontHighlightSmall
+  ns.SetText(fs, "Hype Boy", "GameFontHighlightSmall")
+  check("SetText switches between Korean, Japanese and game fonts", ko and ja and fs.kzzFont == _G.GameFontHighlightSmall)
+end
 clientLocale = "zhCN"; ns.InitLanguage(nil)
-check("on a Chinese client the game fonts are used", not ns.HasCJK("夜に駆ける"))
+check("on a Chinese client the game fonts are used", not ns.TextFont("夜に駆ける") and not ns.TextFont("↑↓"))
+check("on a Chinese client hangul still uses Nanum Gothic", ns.TextFont("뉴진스") == "ko")
+clientLocale = "koKR"; ns.InitLanguage(nil)
+check("on a Korean client the game fonts are used", not ns.TextFont("뉴진스") and not ns.TextFont("夜に駆ける"))
+clientLocale = "ruRU"; ns.InitLanguage(nil)
+check("on a Russian client Cyrillic keeps the game font", not ns.TextFont("Кино") and ns.TextFont("夜") == "cjk")
 clientLocale = "enUS"; ns.InitLanguage(nil)
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

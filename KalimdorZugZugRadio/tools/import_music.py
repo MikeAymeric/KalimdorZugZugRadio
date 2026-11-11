@@ -307,6 +307,12 @@ def lua_str(s: str) -> str:
     return f'"{s}"'
 
 
+def lua_text(s: str) -> str:
+    """Displayed text: NFC, because WoW draws decomposed marks (e.g. macOS file names) as separate glyphs.
+    Not for `file`, which must match the name on disk and is the track id."""
+    return lua_str(unicodedata.normalize("NFC", s))
+
+
 def wow_path(p: Path) -> str:
     return str(p.relative_to(ADDON_DIR)).replace("/", "\\")
 
@@ -678,9 +684,9 @@ def write_library(tracks: list[dict]) -> None:
         "  tracks = {",
     ]
     for t in tracks:
-        fields = [f"file = {lua_str(t['file'])}", f"folder = {lua_str(t['folder'])}",
-                  f"title = {lua_str(t['title'])}", f"artist = {lua_str(t['artist'])}",
-                  f"album = {lua_str(t['album'])}", f"duration = {t['duration']}"]
+        fields = [f"file = {lua_str(t['file'])}", f"folder = {lua_text(t['folder'])}",
+                  f"title = {lua_text(t['title'])}", f"artist = {lua_text(t['artist'])}",
+                  f"album = {lua_text(t['album'])}", f"duration = {t['duration']}"]
         if t["cover"]:
             fields.append(f"cover = {lua_str(t['cover'])}")
         if t.get("episode"):

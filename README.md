@@ -14,7 +14,7 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 - **Podcasts**: the latest episodes of your favourite podcasts, resumed where you left off.
 - **Player**: cover, title, remaining time, controls, volume, favourites, a compact mode and a classic WoW look.
 - **Comfort**: key bindings, minimap button, "Now playing" banner, pause when AFK, lower music during cinematics, per-character profiles.
-- **11 languages**: English, Français, Deutsch, Español (EU), Español (AL), Português (BR), Italiano, Русский, 简体中文, 繁體中文, 日本語.
+- **12 languages**: English, Français, Deutsch, Español (EU), Español (AL), Português (BR), Italiano, Русский, 简体中文, 繁體中文, 日本語, 한국어.
 
 ## Requirements
 
@@ -172,7 +172,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 - **The conditions don't change the music**: the player is probably in *Free play* (shown in orange). Choose *Automatic (conditions)* in the player's dropdown or type `/kzz auto`.
 - **New tracks or episodes don't appear**: run the import script again and restart the game client (not just `/reload`).
 - **A song restarts from the beginning after a fight or after dying**: WoW can't resume a song halfway. Podcasts resume from their current part.
-- **Japanese or Chinese titles**: they use a font bundled with the addon, so they are readable on any client.
+- **Japanese, Chinese or Korean titles**: they use fonts bundled with the addon (KZZR Sans, and Nanum Gothic for Korean), so they are readable on any client. So are symbols the game font lacks: arrows, stars, hearts, dingbats like ✿ ☀ ⚡ ✨, Greek letters, fullwidth punctuation. Emoji outside the basic plane (😂 🔥) are not supported.
 - **Something looks broken**: type `/kzz debug`, then `/reload`, and include the output when you report the problem.
 
 ## Development
@@ -186,6 +186,6 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 
 Code: [MIT](LICENSE) © 2026 MikeAymeric.
 
-The font `KalimdorZugZugRadio/fonts/MPLUS1p-Regular.ttf` (M+ 1p, © The M+ Project Authors) is **not** covered by the MIT license: it is distributed under the SIL Open Font License 1.1 (`KalimdorZugZugRadio/fonts/OFL-MPLUS1p.txt`).
+The fonts are **not** covered by the MIT license. `KalimdorZugZugRadio/fonts/KZZRSans-Regular.ttf` (KZZR Sans) is M+ 1p (© The M+ Project Authors) with symbols merged from Noto Sans Symbols, Symbols 2, Math, JP and Emoji (© The Noto Project Authors, Adobe, Google) by `tools/build_fonts.py`; it is distributed under the SIL Open Font License 1.1 (`KalimdorZugZugRadio/fonts/OFL-KZZRSans.txt`). The same applies to `KalimdorZugZugRadio/fonts/NanumGothic-Regular.ttf` (Nanum Gothic, © 2010 NHN Corporation), under the SIL Open Font License 1.1 (`KalimdorZugZugRadio/fonts/OFL-NanumGothic.txt`).
 
 Music is not part of this project: everyone uses their own files. World of Warcraft is a trademark of Blizzard Entertainment; this addon is not affiliated with Blizzard.

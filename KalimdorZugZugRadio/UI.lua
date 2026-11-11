@@ -49,6 +49,16 @@ function ns.MakeDropdown(parent, width, defaultText, generator)
   dd:SetWidth(width)
   dd:SetDefaultText(defaultText)
   if ns.useAddonFont and dd.Text then dd.Text:SetFontObject(ns.FontObject("GameFontHighlightSmall")) end
+  -- The selected entry's text (e.g. a Japanese or Korean playlist name) is set by Blizzard's code:
+  -- pick the font after it.
+  if dd.Text and hooksecurefunc and dd.Text.GetFontObject then
+    local base = dd.Text:GetFontObject() -- the template's (or the UI language's) font
+    pcall(hooksecurefunc, dd.Text, "SetText", function(fs, text)
+      local need = ns.TextFont(text)
+      local fo = need and ns.FontObject("GameFontHighlightSmall", need) or base
+      if fo and fs.kzzFont ~= fo then fs:SetFontObject(fo) fs.kzzFont = fo end
+    end)
+  end
   dd:SetupMenu(generator)
   return dd
 end
@@ -64,7 +74,7 @@ local function setupDropdown()
       local radio = root:CreateRadio(("%s (%d)"):format(ns.PlaylistLabel(name), count),
         function() return ns.db.mode == name end,
         function() ns.SetMode(name) end)
-      ns.StyleMenuItem(radio, ns.HasCJK(name))
+      ns.StyleMenuItem(radio, ns.TextFont(name))
       if count == 0 and radio.SetEnabled then radio:SetEnabled(false) end
     end
     root:CreateDivider()
