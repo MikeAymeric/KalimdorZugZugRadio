@@ -1,8 +1,9 @@
 """Kalimdor ZugZug Radio - imports your music and podcasts.
 
 Double-click this file to run it (Python from python.org opens .py files with a
-double-click). It runs tools/import_music.py and keeps the window open at the end.
-From a terminal you can add options: python "Import music.py" --keep-originals
+double-click). It runs tools/import_music.py, which shows a menu with the options,
+and keeps the window open at the end.
+From a terminal you can pass options instead: python "Import music.py" --keep-originals
 """
 import os
 import runpy

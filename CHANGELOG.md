@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+- **Import music.py shows a menu** with the options (keep originals, rename, podcasts, recover covers, addon folder): no terminal needed.
+- **Covers are no longer lost**: the cover list is saved before each original is deleted (an interrupted import used to lose the covers of the files converted so far), and an original whose cover can't be extracted is not deleted.
+- New option `--covers-from "folder"` (also in the menu): recovers missing covers from your original files kept elsewhere, without modifying them.
+- The import ends with a list of the folders whose tracks have no cover.
+- **Sync with your music library**: choose the folder where you keep your music (menu option 1, or `--library`); the import copies and converts only the tracks that are not in the addon yet, after showing you the list. Your library is only read.
+
 ## 0.7.0
 
 - **Korean translation** (한국어), with the bundled Nanum Gothic font on non-Korean clients.

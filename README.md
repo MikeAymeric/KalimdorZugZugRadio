@@ -49,9 +49,9 @@ You can already listen to the game soundtrack: open the library (the **Library**
    World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio\music\
    ```
    You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
-2. In the addon folder, double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/): tick "Add python.exe to PATH" when installing it). A window shows the progress; press Enter to close it at the end. If double-clicking opens the file in an editor instead, use the terminal command below.
+2. In the addon folder, double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/): tick "Add python.exe to PATH" when installing it). A window opens with a small menu: type the number of an option to change it (your music library, keep the originals, podcasts, recover covers...), then press Enter to start. The window shows the progress; press Enter to close it at the end. If double-clicking opens the file in an editor instead, use the terminal command below.
 
-   You can also run the script from a terminal opened in the addon folder, which lets you add options:
+   You can also run the script from a terminal opened in the addon folder and pass the options directly (the menu then doesn't appear; `--help` lists them):
    ```
    python tools\import_music.py --keep-originals
    ```
@@ -64,7 +64,9 @@ You can already listen to the game soundtrack: open the library (the **Library**
 What the script does:
 
 - **Conversion**: formats WoW can't play are converted to OGG. After a successful conversion the original file is deleted; add `--keep-originals` to keep the originals in `music\_originals\` instead.
-- **Covers**: the cover embedded in each file is used, or a `cover.jpg` / `folder.jpg` in the folder. Identical covers are stored only once.
+- **Covers**: the cover embedded in each file is used, or a `cover.jpg` / `folder.jpg` in the folder. Identical covers are stored only once. An original whose cover can't be extracted is not deleted. At the end the script lists the folders whose tracks have no cover.
+- **Your music library**: if you keep your music in another folder (for example a Plex or iTunes library), choose it with option 1 of the menu, or pass `--library "D:\path\to\library"`. The script compares it with the `music` folder, lists the tracks that are missing and, after you confirm, copies and converts them. The folder is remembered for the next time and is only read. It only adds: a track you delete from `music` but keep in the library is copied again next time. Missing covers are also recovered from it.
+- **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, run `python tools\import_music.py --covers-from "D:\path\to\originals"`. That folder is only read.
 - **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Use `--keep-names` to disable this.
 - Run the script again every time you add or remove music.
 
