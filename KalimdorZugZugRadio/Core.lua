@@ -37,6 +37,7 @@ local DEFAULTS = {
   profiles = {},
   charProfiles = {}, -- "Name-Realm" -> profile name
   crossfade = true,  -- fade the music volume when the condition changes
+  smartShuffle = true, -- weighted shuffle: skipped/recent tracks less often, unheard ones more
   fightTail = 8,     -- seconds the fight music keeps playing (fading out) after the combat
   duck = true,       -- lower the music during cinematics and dialogues
   afkPause = true,   -- pause while AFK
@@ -44,7 +45,7 @@ local DEFAULTS = {
   favorites = {},    -- track id -> true
   excluded = {},     -- track id -> true (never played automatically)
   history = {},      -- track ids, most recent first (max 50)
-  stats = {},        -- track id -> { plays = n, seconds = s }
+  stats = {},        -- track id -> { plays = n, seconds = s, skips = n }
   totalSeconds = 0,
   seenBosses = {},   -- encounterID -> boss name (to assign boss-specific music)
   podcastProgress = {}, -- "ep:<key>" -> { part = n, done = true|nil, at = timestamp }
@@ -629,6 +630,9 @@ function ns.RecordPlay(prev, new, seconds)
   if prev and (seconds or 0) > 0 then
     local st = ns.db.stats[prev.file] or { plays = 0, seconds = 0 }
     st.seconds = (st.seconds or 0) + seconds
+    -- listened to the end: forgive one old skip
+    local dur = tonumber(prev.duration) or 0
+    if st.skips and dur > 0 and seconds >= dur * 0.9 then st.skips = st.skips > 1 and st.skips - 1 or nil end
     ns.db.stats[prev.file] = st
     ns.db.totalSeconds = (ns.db.totalSeconds or 0) + seconds
   end
@@ -642,6 +646,39 @@ function ns.RecordPlay(prev, new, seconds)
     table.insert(h, 1, new.file)
     for i = #h, 51, -1 do h[i] = nil end
   end
+end
+
+-- The user pressed Next early in a track: it counts as skipped (weighted shuffle).
+-- Podcasts move by parts and are not counted.
+local SKIP_SECONDS, SKIP_SHARE = 30, 0.3
+function ns.RecordSkip(track, elapsed)
+  if not track or track.parts or not track.file then return end
+  local dur = tonumber(track.duration) or 0
+  if dur <= 0 or elapsed >= math.min(SKIP_SECONDS, dur * SKIP_SHARE) then return end
+  local st = ns.db.stats[track.file] or { plays = 0, seconds = 0 }
+  st.skips = (st.skips or 0) + 1
+  ns.db.stats[track.file] = st
+end
+
+-- Weighted shuffle: how likely each track is to come early in the queue.
+-- Never heard x1.5, each skip divides by 1 + 0.5 x skips, recently played much less.
+-- No track is ever left out (excluding is a separate, explicit choice).
+local RECENT_STRONG, RECENT_WEAK = 10, 25
+function ns.ShuffleWeights(tracks)
+  local recent = {}
+  for i, id in ipairs(ns.db.history) do
+    if i > RECENT_WEAK then break end
+    recent[id] = i <= RECENT_STRONG and 0.25 or 0.6
+  end
+  local w = {}
+  for i, t in ipairs(tracks) do
+    local st = ns.db.stats[t.file]
+    local v = (not st or (st.plays or 0) == 0) and 1.5 or 1
+    if st and st.skips then v = v / (1 + 0.5 * st.skips) end
+    v = v * (recent[t.file] or 1)
+    w[i] = math.max(v, 0.1)
+  end
+  return w
 end
 
 function ns.FormatDuration(sec)

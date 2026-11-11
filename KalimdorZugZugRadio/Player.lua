@@ -18,14 +18,23 @@ local states = {} -- playlist name -> { queue = {indices}, pos = n, count = n }
 local playMusic = ns.Profiled("PlayMusic", function(source) return PlayMusic(source) end)
 local timer
 
-local function buildQueue(count, first)
+-- Queue of track indices. With shuffle: a random order, weighted when smart shuffle is on
+-- (Efraimidis-Spirakis: sort by random^(1/weight), heavier tracks tend to come first).
+local function buildQueue(tracks, first)
+  local count = #tracks
   local q = {}
   for i = 1, count do q[i] = i end
-  if ns.db.shuffle then
+  if ns.db.shuffle and ns.db.smartShuffle and count > 1 then
+    local w, keys = ns.ShuffleWeights(tracks), {}
+    for i = 1, count do keys[i] = math.random() ^ (1 / w[i]) end
+    table.sort(q, function(a, b) return keys[a] > keys[b] end)
+  elseif ns.db.shuffle then
     for i = count, 2, -1 do
       local j = math.random(i)
       q[i], q[j] = q[j], q[i]
     end
+  end
+  if ns.db.shuffle then
     if first then
       for i, v in ipairs(q) do
         if v == first then q[1], q[i] = q[i], q[1] break end
@@ -44,7 +53,7 @@ end
 -- Builds the queue starting from startIndex (if given).
 local function resetState(name, startIndex)
   local pl = ns.GetPlaylist(name)
-  local st = { queue = buildQueue(#pl.tracks, startIndex), count = #pl.tracks, pos = 1 }
+  local st = { queue = buildQueue(pl.tracks, startIndex), count = #pl.tracks, pos = 1 }
   if startIndex and not ns.db.shuffle then st.pos = startIndex end
   states[name] = st
   return st, pl
@@ -154,7 +163,7 @@ local function freshTrack(name)
   if ns.db.shuffle then
     st.pos = st.pos + 1
     if st.pos > #st.queue then
-      st.queue = buildQueue(#pl.tracks)
+      st.queue = buildQueue(pl.tracks)
       st.pos = 1
     end
   else
@@ -374,7 +383,10 @@ end
 -- On a podcast it advances one part; after the last one the episode is done and we move on.
 function P:Next(auto)
   if not playable(self.playlist) then return end
-  if not auto then takeManualControl() end
+  if not auto then
+    takeManualControl()
+    if self.playing then ns.RecordSkip(self.track, self:ElapsedInPart()) end
+  end
   local t = self.track
   if t and t.parts then
     local part = ns.EpisodePart(t)
@@ -388,7 +400,7 @@ function P:Next(auto)
   local st, pl = getState(self.playlist)
   st.pos = st.pos + 1
   if st.pos > #st.queue then
-    st.queue = buildQueue(#pl.tracks)
+    st.queue = buildQueue(pl.tracks)
     st.pos = 1
   end
   self:Play()
@@ -399,6 +411,7 @@ end
 function P:SkipTrack(dir)
   if not playable(self.playlist) then return end
   takeManualControl()
+  if dir > 0 and self.playing then ns.RecordSkip(self.track, self:ElapsedInPart()) end
   local st = getState(self.playlist)
   st.pos = st.pos + (dir < 0 and -1 or 1)
   if st.pos < 1 then st.pos = #st.queue elseif st.pos > #st.queue then st.pos = 1 end

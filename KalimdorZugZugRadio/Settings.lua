@@ -14,7 +14,7 @@ local function text(parent, template)
 end
 
 -- Checkbox with a label; onToggle(checked).
-local function checkOption(parent, label, x, y, onToggle, template)
+local function checkOption(parent, label, x, y, onToggle, template, tooltip)
   local c = CreateFrame("CheckButton", nil, parent)
   c:SetSize(24, 24)
   c:SetPoint("TOPLEFT", x, y)
@@ -26,6 +26,10 @@ local function checkOption(parent, label, x, y, onToggle, template)
   c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
   c.label:SetText(label)
   c:SetScript("OnClick", function(self) onToggle(self:GetChecked() and true or false) end)
+  if tooltip then
+    c:SetScript("OnEnter", function(self) ns.ShowTooltip(self, "ANCHOR_RIGHT", { label, tooltip }) end)
+    c:SetScript("OnLeave", function() ns.HideTooltip() end)
+  end
   return c
 end
 
@@ -44,7 +48,7 @@ end
 ---------------------------------------------------------------------------
 -- Content (inside a scroll frame: with 16 conditions it's taller than the Options canvas)
 ---------------------------------------------------------------------------
-local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 710
+local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 736
 local ROWS_PER_COLUMN = 8
 
 local function playlistMenu(root, isSelected, select)
@@ -87,10 +91,14 @@ local function build(p)
   p.optAfk = checkOption(c, L.OPT_AFK, 330, -162, function(on) ns.db.afkPause = on end)
   p.optDuck = checkOption(c, L.OPT_DUCK, 16, -188, function(on) ns.db.duck = on if not on then ns.Player:SetDucked(false) end end)
   p.optCompact = checkOption(c, L.OPT_COMPACT, 330, -188, function(on) ns.UI:SetCompact(on) end)
+  p.optSmartShuffle = checkOption(c, L.OPT_SMART_SHUFFLE, 16, -214, function(on)
+    ns.db.smartShuffle = on
+    ns.Player:SetShuffle(ns.db.shuffle) -- rebuild the queues with the new order
+  end, nil, L.TT_SMART_SHUFFLE)
 
   -- profile: the condition settings below belong to it
   local profLabel = text(c, "GameFontNormal")
-  profLabel:SetPoint("TOPLEFT", 20, -226)
+  profLabel:SetPoint("TOPLEFT", 20, -252)
   profLabel:SetText(L.PROFILE)
   p.profile = ns.MakeDropdown(c, 220, L.PROFILE_DEFAULT, function(_, root)
     for _, name in ipairs(ns.ProfileNames()) do
@@ -110,7 +118,7 @@ local function build(p)
 
   -- how long the fight music lasts (fading out) after the combat
   local tailLabel = text(c, "GameFontNormal")
-  tailLabel:SetPoint("TOPLEFT", 334, -226)
+  tailLabel:SetPoint("TOPLEFT", 334, -252)
   tailLabel:SetText(L.OPT_FIGHT_TAIL)
   p.fightTail = ns.MakeDropdown(c, 80, L.FIGHT_TAIL_SECONDS:format(8), function(_, root)
     for _, sec in ipairs({ 4, 6, 8, 10 }) do
@@ -130,7 +138,7 @@ local function build(p)
   end
 
   local langLabel = text(c, "GameFontNormal")
-  langLabel:SetPoint("TOPLEFT", 20, -262)
+  langLabel:SetPoint("TOPLEFT", 20, -288)
   langLabel:SetText(L.LANGUAGE)
   -- CJK language names always use a bundled font, so they are readable on any client
   p.lang = ns.MakeDropdown(c, 200, L.LANG_AUTO, function(_, root)
@@ -148,21 +156,21 @@ local function build(p)
   p.reload = ns.MakeButton(c, L.RELOAD, 130, function() ReloadUI() end)
   p.reload:SetPoint("LEFT", p.lang or langLabel, "RIGHT", 12, 0)
   p.langHint = text(c, "GameFontDisableSmall")
-  p.langHint:SetPoint("TOPLEFT", 20, -286)
+  p.langHint:SetPoint("TOPLEFT", 20, -312)
   p.langHint:SetText(L.LANG_RELOAD_HINT)
 
   -- Conditions ---------------------------------------------------------------
-  sectionHeader(c, L.CONDITIONS, -316)
+  sectionHeader(c, L.CONDITIONS, -342)
   -- free play warning: while a playlist is chosen manually, conditions are ignored
   p.freeBack = ns.MakeButton(c, L.BACK_AUTO, 150, function() ns.SetMode("auto") S:Refresh() end, L.TT_BACK_AUTO)
-  p.freeBack:SetPoint("TOPRIGHT", -16, -340)
+  p.freeBack:SetPoint("TOPRIGHT", -16, -366)
   p.freeWarn = text(c, "GameFontNormal")
-  p.freeWarn:SetPoint("TOPLEFT", 16, -344)
+  p.freeWarn:SetPoint("TOPLEFT", 16, -370)
   p.freeWarn:SetPoint("RIGHT", p.freeBack, "LEFT", -10, 0)
   p.freeWarn:SetJustifyH("LEFT")
   p.freeWarn:SetTextColor(1, 0.6, 0.1)
   local hint = text(c, "GameFontHighlightSmall")
-  hint:SetPoint("TOPLEFT", 16, -372)
+  hint:SetPoint("TOPLEFT", 16, -398)
   hint:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   hint:SetJustifyH("LEFT")
   hint:SetText(L.COND_SETTINGS_HINT)
@@ -171,7 +179,7 @@ local function build(p)
   p.conditions = {}
   for i, s in ipairs(ns.SITUATIONS) do
     local col = math.floor((i - 1) / ROWS_PER_COLUMN)
-    local y = -400 - ((i - 1) % ROWS_PER_COLUMN) * 34
+    local y = -426 - ((i - 1) % ROWS_PER_COLUMN) * 34
     local x = 16 + col * 316
     local row = {}
     row.check = checkOption(c, ns.SituationLabel(s.key), x, y, function(on) ns.SetConditionEnabled(s.key, on) end,
@@ -214,7 +222,7 @@ local function build(p)
   end
 
   p.zoneLine = text(c, "GameFontHighlightSmall")
-  p.zoneLine:SetPoint("TOPLEFT", 20, -400 - ROWS_PER_COLUMN * 34 - 6)
+  p.zoneLine:SetPoint("TOPLEFT", 20, -426 - ROWS_PER_COLUMN * 34 - 6)
   p.zoneLine:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   p.zoneLine:SetJustifyH("LEFT")
 
@@ -266,6 +274,7 @@ function S:Refresh()
   if not panel then return end
   panel.optEnabled:SetChecked(ns.db.enabled)
   panel.optShuffle:SetChecked(ns.db.shuffle)
+  panel.optSmartShuffle:SetChecked(ns.db.smartShuffle)
   panel.optMinimap:SetChecked(not ns.db.minimap.hide)
   panel.optLock:SetChecked(ns.db.ui.locked)
   panel.optClassic:SetChecked((ns.db.ui.skin or "classic") == "classic")

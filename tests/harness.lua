@@ -567,6 +567,46 @@ check("a normal fight after a boss uses the long tail again", ns.Player.playlist
 advance(5)
 ns.DeletePlaylist("Pulls"); ns.DeletePlaylist("BossPL"); ns.db.fightTail = 4; ns.db.crossfade = false; advance(5)
 
+-- 1.0: weighted shuffle (skips, never heard, recently played)
+do
+  ns.db.shuffle = true
+  local a, b, c = ns.trackById["music\\a.ogg"], ns.trackById["music\\b.ogg"], ns.trackById["music\\c.mp3"]
+  ns.PlayFrom(ns.ALL, c); advance(1)
+  local before = (ns.db.stats[c.file].skips or 0)
+  ns.Player:Next(); advance(0)
+  check("Next early in a track counts as a skip", (ns.db.stats[c.file].skips or 0) == before + 1)
+  ns.PlayFrom(ns.ALL, c); advance(5)
+  local skips = ns.db.stats[c.file].skips
+  ns.Player:Next(); advance(0)
+  check("Next after 30% of the track is not a skip", ns.db.stats[c.file].skips == skips)
+  ns.PlayFrom(ns.ALL, c); advance(10.6)
+  check("listening to the end forgives one skip", (ns.db.stats[c.file].skips or 0) == skips - 1)
+  ns.db.stats[c.file].skips = 4
+  local fake = { file = "music\\never.ogg" }
+  wipe(ns.db.history); for i = 1, 30 do table.insert(ns.db.history, "x" .. i) end
+  table.insert(ns.db.history, 1, b.file)
+  local w = ns.ShuffleWeights({ a, c, fake, b })
+  check("weights: skipped < normal < never heard, recent much less", w[2] < w[1] and w[1] < w[3] and w[4] < w[2] + 0.5
+    and math.abs(w[3] - 1.5) < 0.001 and math.abs(w[2] - 1 / 3) < 0.001 and w[4] >= 0.1)
+  local firstA, firstC = 0, 0
+  for _ = 1, 400 do
+    wipe(ns.db.history)
+    ns.PlayFrom(ns.ALL, nil)
+    if ns.Player.track == a then firstA = firstA + 1 elseif ns.Player.track == c then firstC = firstC + 1 end
+  end
+  check("a track skipped 4 times comes first much less often (" .. firstA .. " vs " .. firstC .. ")", firstC * 1.8 < firstA)
+  ns.db.smartShuffle = false
+  firstA, firstC = 0, 0
+  for _ = 1, 400 do
+    ns.PlayFrom(ns.ALL, nil)
+    if ns.Player.track == a then firstA = firstA + 1 elseif ns.Player.track == c then firstC = firstC + 1 end
+  end
+  check("plain shuffle ignores the skips (" .. firstA .. " vs " .. firstC .. ")", firstC * 1.8 > firstA)
+  ns.db.smartShuffle = true
+  ns.db.stats[c.file].skips = nil
+  ns.SetMode("auto"); advance(5)
+end
+
 -- key bindings
 check("binding names defined", BINDING_HEADER_KZZR == "Kalimdor ZugZug Radio" and BINDING_NAME_KZZR_PLAY ~= nil)
 local v0 = ns.Player:GetVolume(); KZZR_Binding("voldown")
