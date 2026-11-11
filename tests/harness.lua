@@ -144,8 +144,8 @@ KZZR_Library = { tracks = {
 } }
 
 KZZR_GameMusic = {
-  { fid = 53198, title = "Orgrimmar 01 Zone", folder = "WoW Classic/Cities/Orgrimmar", duration = 68.89, icon = 135759 },
-  { fid = 8158670, title = "Hyjal General A", folder = "WoW Forever/New zones", duration = 120, icon = 136096 },
+  { fid = 53198, title = "Orgrimmar 01 Zone", folder = "WoW Classic/Cities/Orgrimmar", duration = 68.89, icon = 135759, preset = "town" },
+  { fid = 8158670, title = "Hyjal General A", folder = "WoW Forever/New zones", duration = 120, icon = 136096, preset = "idle" },
 }
 
 local ns = {}
@@ -703,6 +703,26 @@ do
   check("turning the option off brings the music back", not P:InZoneBreak() and P.playing)
   ns.db.zoneBreakEvery, ns.db.zoneBreakMinutes = 3, 2
   ns.DeletePlaylist("BreakFight"); advance(5)
+end
+
+-- 1.0: presets of the game music catalog (ready-made playlists)
+check("preset tracks of a condition", #ns.PresetTrackIds("town") == 1 and ns.PresetTrackIds("town")[1] == "game:53198"
+  and #ns.PresetTrackIds("boss") == 0)
+do
+  local saved = KZZR_GameMusic
+  KZZR_GameMusic = nil
+  assert(load(SRC.GameMusic, "GameMusic"))()
+  local n, bad, keys = 0, {}, {}
+  for _, g in ipairs(KZZR_GameMusic) do
+    n = n + 1
+    if g.preset then keys[g.preset] = (keys[g.preset] or 0) + 1 end
+    if not g.preset or not ns.SITUATION_BY_KEY[g.preset] then bad[#bad + 1] = g.title end
+  end
+  check("every track of GameMusic.lua has a valid preset (" .. n .. " tracks"
+    .. (#bad > 0 and ("; bad: " .. table.concat(bad, ", ")) or "") .. ")", n > 500 and #bad == 0)
+  check("presets cover the main conditions", keys.combat and keys.boss and keys.town and keys.dungeon and keys.idle
+    and keys.night and keys.campfire and keys.dead and keys.levelup)
+  KZZR_GameMusic = saved
 end
 
 -- key bindings

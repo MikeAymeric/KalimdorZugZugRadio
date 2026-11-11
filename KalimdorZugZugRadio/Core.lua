@@ -272,7 +272,8 @@ function ns.LoadLibrary()
     local id = "game:" .. tostring(g.fid)
     if type(g.fid) == "number" and not ns.trackById[id] then
       indexTrack({ file = id, fid = g.fid, game = true, title = g.title or tostring(g.fid), artist = "World of Warcraft",
-        album = "", folder = g.folder, duration = g.duration, icon = g.icon }, ns.gameTracks, ns.gameById)
+        album = "", folder = g.folder, duration = g.duration, icon = g.icon, preset = g.preset },
+        ns.gameTracks, ns.gameById)
     end
   end
   table.sort(ns.tracks, byFolderTitle)
@@ -280,6 +281,16 @@ function ns.LoadLibrary()
   for _, list in ipairs({ ns.tracks, ns.episodes, ns.gameTracks }) do
     for _, t in ipairs(list) do table.insert(ns.everyTrack, t) end
   end
+end
+
+-- Ids of the game tracks suited to a condition (the `preset` field of GameMusic.lua), used to
+-- create ready-made playlists.
+function ns.PresetTrackIds(key)
+  local ids = {}
+  for _, t in ipairs(ns.gameTracks) do
+    if t.preset == key then ids[#ids + 1] = t.file end
+  end
+  return ids
 end
 
 -- Cover texture: game icon (FileDataID) for game music, the addon's PNG for the rest.
