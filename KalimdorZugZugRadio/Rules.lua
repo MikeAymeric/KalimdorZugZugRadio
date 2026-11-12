@@ -282,7 +282,9 @@ function R:Start()
     local d = track and tonumber(track.duration) or 0
     if state.levelup and R.current == "levelup" and d > 0 then
       if levelupEnd then levelupEnd:Cancel() end
-      levelupEnd = C_Timer.NewTimer(math.min(d, 120) + 0.2, endLevelup) -- before the player's own +0.5s advance
+      -- just before the player's own end-of-track advance, or it would start another jingle
+      local early = (ns.Player and ns.Player.END_EARLY or 0) + 0.1
+      levelupEnd = C_Timer.NewTimer(math.max(math.min(d, 120) - early, 0.1), endLevelup)
     end
   end)
   on("UNIT_SPELLCAST_CHANNEL_START", function(unit, _, spellID)

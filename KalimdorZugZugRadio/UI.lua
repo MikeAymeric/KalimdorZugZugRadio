@@ -48,22 +48,22 @@ function ns.MakeButton(parent, text, width, onClick, tooltip)
   return b
 end
 
--- Classic checkbox; with a label, c.label is the font string next to it.
+-- Classic checkbox; with a label, cb.label is the font string next to it.
 function ns.MakeCheckbox(parent, size, label, template)
-  local c = CreateFrame("CheckButton", nil, parent)
-  c:SetSize(size, size)
-  c:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  c:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  c:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  if c.SetDisabledCheckedTexture then c:SetDisabledCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check-Disabled") end
+  local cb = CreateFrame("CheckButton", nil, parent)
+  cb:SetSize(size, size)
+  cb:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
+  cb:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
+  cb:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
+  cb:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  if cb.SetDisabledCheckedTexture then cb:SetDisabledCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check-Disabled") end
   if label then
-    c.label = parent:CreateFontString(nil, "OVERLAY", ns.Font(template or "GameFontHighlight"))
-    c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
-    c.label:SetJustifyH("LEFT")
-    c.label:SetText(label)
+    cb.label = parent:CreateFontString(nil, "OVERLAY", ns.Font(template or "GameFontHighlight"))
+    cb.label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+    cb.label:SetJustifyH("LEFT")
+    cb.label:SetText(label)
   end
-  return c
+  return cb
 end
 
 -- Modern dropdown (Menu API) with the addon font when needed.
@@ -304,7 +304,7 @@ function UI:Build()
   if thumb then thumb:SetSize(24, 24) end
   f.vol:EnableMouseWheel(true)
   f.vol:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * 5) end)
-  f.vol:SetScript("OnValueChanged", function(self, value)
+  f.vol:SetScript("OnValueChanged", function(_, value)
     if UI.syncingVolume then return end
     P:SetVolume(math.floor(value + 0.5) / 100)
   end)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- **No more replay at the end of a song**: when a track ended, about a second of its beginning played again before the next one. The game loops the music it plays, and the addon moved on just after the end; it now moves on a fraction of a second before.
+- The level-up jingle ends at the same moment, so it never starts a second jingle.
+
 ## 1.0.1
 
 - **Safer podcast downloads**: Import music.py only downloads from web addresses (http/https), so a podcast feed can no longer make it copy a file from your PC into the music folder, and downloads have a size limit (2 GB per episode).

@@ -17,6 +17,9 @@ local states = {} -- playlist name -> { queue = {indices}, pos = n, count = n }
 -- PlayMusic opens the file from disk: measured, it's the most likely source of a hitch
 local playMusic = ns.Profiled("PlayMusic", function(source) return PlayMusic(source) end)
 local timer
+-- Seconds before the stored duration at which a track counts as over (Rules' level-up end uses it)
+local END_EARLY = 0.2
+P.END_EARLY = END_EARLY
 
 -- Queue of track indices. With shuffle: a random order, weighted when smart shuffle is on
 -- (Efraimidis-Spirakis: sort by random^(1/weight), heavier tracks tend to come first).
@@ -127,7 +130,9 @@ local function startTrack(queued)
   P.startTime = GetTime()
   dur = tonumber(dur) or 0
   if dur > 0 then
-    timer = C_Timer.NewTimer(dur + 0.5, function()
+    -- PlayMusic loops the file: firing after the end replays its first moments
+    -- (plus the time the client takes to open the next file), so end slightly early
+    timer = C_Timer.NewTimer(math.max(dur - END_EARLY, 0.1), function()
       timer = nil
       -- the track ended while the music fades out after a fight: move on at once
       if ns.Rules and ns.Rules.TrackEnded and ns.Rules:TrackEnded() then return end
