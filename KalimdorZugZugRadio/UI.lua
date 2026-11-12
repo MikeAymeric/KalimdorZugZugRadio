@@ -5,9 +5,15 @@ local L = ns.L
 local UI = {}
 ns.UI = UI
 
-local DEFAULT_COVER = "Interface\\Icons\\INV_Misc_QuestionMark"
-local ACCENT = { 1, 0.5, 0.1 }
+-- Shared by every window of the addon.
+ns.DEFAULT_COVER = "Interface\\Icons\\INV_Misc_QuestionMark"
+ns.ACCENT = { 1, 0.5, 0.1 }
+local DEFAULT_COVER, ACCENT = ns.DEFAULT_COVER, ns.ACCENT
 local f -- main frame
+
+function ns.IsClassicSkin()
+  return (ns.db.ui.skin or "classic") == "classic"
+end
 local c, buildCompact, skinCompact -- compact player (defined further down)
 
 local function savePosition()
@@ -42,6 +48,24 @@ function ns.MakeButton(parent, text, width, onClick, tooltip)
   return b
 end
 
+-- Classic checkbox; with a label, c.label is the font string next to it.
+function ns.MakeCheckbox(parent, size, label, template)
+  local c = CreateFrame("CheckButton", nil, parent)
+  c:SetSize(size, size)
+  c:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
+  c:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
+  c:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
+  c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  if c.SetDisabledCheckedTexture then c:SetDisabledCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check-Disabled") end
+  if label then
+    c.label = parent:CreateFontString(nil, "OVERLAY", ns.Font(template or "GameFontHighlight"))
+    c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
+    c.label:SetJustifyH("LEFT")
+    c.label:SetText(label)
+  end
+  return c
+end
+
 -- Modern dropdown (Menu API) with the addon font when needed.
 function ns.MakeDropdown(parent, width, defaultText, generator)
   local ok, dd = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
@@ -61,6 +85,20 @@ function ns.MakeDropdown(parent, width, defaultText, generator)
   end
   dd:SetupMenu(generator)
   return dd
+end
+
+-- Language choice (settings and guide); onChange() runs after a choice. The CJK language names
+-- always use a bundled font, so they are readable on any client.
+function ns.LanguageDropdown(parent, onChange)
+  return ns.MakeDropdown(parent, 200, L.LANG_AUTO, function(_, root)
+    ns.StyleMenuItem(root:CreateRadio(L.LANG_AUTO, function() return ns.db.lang == nil end,
+      function() ns.SetLanguage(nil) onChange() end))
+    root:CreateDivider()
+    for _, code in ipairs(ns.LANG_ORDER) do
+      ns.StyleMenuItem(root:CreateRadio(ns.LANGUAGE_NAMES[code], function() return ns.db.lang == code end,
+        function() ns.SetLanguage(code) onChange() end), code == "koKR" and "ko" or ns.CJK_LANG[code])
+    end
+  end)
 end
 
 -- Radio list of every playlist plus "none" (noneLabel, default L.NONE), for assignments.
@@ -165,8 +203,8 @@ end
 
 function UI:Build()
   if f then return end
+  -- sizes, anchors, colors and backdrop depend on the skin: UI:ApplySkin sets them
   f = CreateFrame("Frame", "KalimdorZugZugRadioFrame", UIParent, "BackdropTemplate")
-  f:SetSize(410, 146)
   f:SetFrameStrata("MEDIUM")
   f:SetClampedToScreen(true)
   f:SetMovable(true)
@@ -174,31 +212,19 @@ function UI:Build()
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", function(self) if not ns.db.ui.locked then self:StartMoving() end end)
   f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() savePosition() end)
-  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-  f:SetBackdropColor(0.06, 0.05, 0.05, 0.92)
-  f:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.8)
   applyPosition()
 
   f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   f.close:SetSize(24, 24)
-  f.close:SetPoint("TOPRIGHT", 2, 2)
   f.close:SetScript("OnClick", function() UI:Toggle(false) end)
 
   f.cover = f:CreateTexture(nil, "ARTWORK")
-  f.cover:SetSize(96, 96)
-  f.cover:SetPoint("TOPLEFT", 10, -10)
 
-  local textWidth = f:GetWidth() - 96 - 10 - 10 - 12
   f.situation = f:CreateFontString(nil, "OVERLAY", ns.Font("GameFontNormalSmall"))
-  f.situation:SetPoint("TOPLEFT", f.cover, "TOPRIGHT", 10, -2)
-  f.situation:SetWidth(textWidth - 14) -- room for the close button
-  f.situation:SetJustifyH("LEFT")
   f.situation:SetWordWrap(false)
 
   -- title/artist can be in any language, so they use the addon font when needed
   f.title = f:CreateFontString(nil, "OVERLAY", ns.Font("GameFontHighlightLarge"))
-  f.title:SetPoint("TOPLEFT", f.situation, "BOTTOMLEFT", 0, -6)
-  f.title:SetWidth(textWidth)
   f.title:SetJustifyH("LEFT")
   f.title:SetWordWrap(false)
 
@@ -234,20 +260,14 @@ function UI:Build()
 
   f.artist = f:CreateFontString(nil, "OVERLAY", ns.Font("GameFontHighlightSmall"))
   f.artist:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -4)
-  f.artist:SetWidth(textWidth)
   f.artist:SetJustifyH("LEFT")
   f.artist:SetWordWrap(false)
   f.artist:SetTextColor(0.75, 0.75, 0.75)
 
   f.bar = CreateFrame("StatusBar", nil, f)
-  f.bar:SetPoint("BOTTOMLEFT", f.cover, "BOTTOMRIGHT", 10, 16)
-  f.bar:SetSize(textWidth, 6)
-  f.bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-  f.bar:SetStatusBarColor(ACCENT[1], ACCENT[2], ACCENT[3])
   f.bar:SetMinMaxValues(0, 1)
   f.barBg = f.bar:CreateTexture(nil, "BACKGROUND")
   f.barBg:SetAllPoints()
-  f.barBg:SetColorTexture(1, 1, 1, 0.12)
 
   f.elapsed = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   f.elapsed:SetPoint("TOPLEFT", f.bar, "BOTTOMLEFT", 0, -3)
@@ -259,7 +279,6 @@ function UI:Build()
   f.play = ns.MakeButton(f, ">", 32, function() P:Toggle() end, L.TT_PLAY)
   f.next = ns.MakeButton(f, ">|", 32, function() P:Next() end, L.TT_NEXT)
   f.shuffle = ns.MakeButton(f, L.SHUFFLE, 64, function() P:SetShuffle(not ns.db.shuffle) end, L.TT_SHUFFLE)
-  f.shuffle:SetPoint("BOTTOMRIGHT", -10, 8)
   -- podcast only: whole-episode navigation (prev/next move by one 2:30 part)
   f.epPrev = ns.MakeButton(f, "|<<", 34, function() P:SkipTrack(-1) end, L.TT_PREV_EPISODE)
   f.epNext = ns.MakeButton(f, ">>|", 34, function() P:SkipTrack(1) end, L.TT_NEXT_EPISODE)
@@ -297,7 +316,6 @@ function UI:Build()
   ns.On("VOLUME_CHANGED", function() UI:SyncVolume() end)
 
   f.dropdown = setupDropdown()
-  if f.dropdown then f.dropdown:SetPoint("BOTTOMLEFT", 8, 8) end
 
   self:ApplySkin()
 
@@ -403,7 +421,7 @@ end
 
 function UI:ApplySkin()
   if not f then return end
-  local classic = (ns.db.ui.skin or "classic") == "classic"
+  local classic = ns.IsClassicSkin()
   local textWidth
   if classic then
     classicDecorations()
@@ -492,7 +510,7 @@ function UI:HasClassicDecorations() return decorated end
 -- the title, or the flat modern look. closeBtn is moved inside the classic border.
 local windowHeaders = setmetatable({}, { __mode = "k" })
 function ns.SkinWindow(win, titleFS, closeBtn)
-  local classic = (ns.db.ui.skin or "classic") == "classic"
+  local classic = ns.IsClassicSkin()
   local header = windowHeaders[win]
   if classic then
     if win.SetBackdrop then
@@ -699,7 +717,7 @@ function UI:Refresh()
     status = "|cffff9a1a" .. L.STATUS_FREE .. "|r  ·  " .. ns.PlaylistLabel(ns.db.mode)
   end
   ns.SetText(f.situation, status, UI.statusFont or "GameFontNormalSmall")
-  if decorated and (ns.db.ui.skin or "classic") == "classic" then
+  if decorated and ns.IsClassicSkin() then
     -- the gold header grows with the status text (truncated only beyond the player's width)
     f.header:Fit(f.situation, f:GetWidth() - 40)
   end
@@ -783,19 +801,25 @@ function buildCompact()
   c.title:SetWordWrap(false)
 end
 
-function skinCompact()
-  if not c or not c.SetBackdrop then return end
-  if (ns.db.ui.skin or "classic") == "classic" then
-    c:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                    tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-    c:SetBackdropColor(0.05, 0.05, 0.08, 0.92)
-    c:SetBackdropBorderColor(1, 0.82, 0, 1)
+-- Small bars (compact player, "now playing" banner): tooltip-style border, or the flat look.
+local TOAST_BACKDROP = {
+  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 },
+}
+function ns.SkinToast(frame)
+  if not frame or not frame.SetBackdrop then return end
+  if ns.IsClassicSkin() then
+    frame:SetBackdrop(TOAST_BACKDROP)
+    frame:SetBackdropColor(0.05, 0.05, 0.08, 0.92)
+    frame:SetBackdropBorderColor(1, 0.82, 0, 1)
   else
-    c:SetBackdrop(MODERN_BACKDROP)
-    c:SetBackdropColor(0.06, 0.05, 0.05, 0.92)
-    c:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.8)
+    frame:SetBackdrop(MODERN_BACKDROP)
+    frame:SetBackdropColor(0.06, 0.05, 0.05, 0.92)
+    frame:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.8)
   end
 end
+
+function skinCompact() ns.SkinToast(c) end
 
 function UI:RefreshCompact()
   if not c then return end

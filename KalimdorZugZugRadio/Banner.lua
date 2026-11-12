@@ -6,7 +6,6 @@ local B = {}
 ns.Banner = B
 
 local SHOW_TIME, FADE_TIME = 4, 0.4
-local DEFAULT_COVER = "Interface\\Icons\\INV_Misc_QuestionMark"
 local f, lastTrack, hideTimer
 
 local function anchor()
@@ -16,22 +15,6 @@ local function anchor()
     f:SetPoint("BOTTOMLEFT", chat, "TOPLEFT", -4, 28) -- above the chat tabs
   else
     f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 20, 220)
-  end
-end
-
-local function applySkin()
-  local classic = (ns.db.ui.skin or "classic") == "classic"
-  if f.SetBackdrop then
-    if classic then
-      f:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                      tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-      f:SetBackdropColor(0.05, 0.05, 0.08, 0.92)
-      f:SetBackdropBorderColor(1, 0.82, 0, 1)
-    else
-      f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-      f:SetBackdropColor(0.06, 0.05, 0.05, 0.92)
-      f:SetBackdropBorderColor(1, 0.5, 0.1, 0.8)
-    end
   end
 end
 
@@ -75,8 +58,8 @@ function B:Build()
   f.fadeOut:SetScript("OnFinished", function() f:Hide() end)
 
   ns.On("TRACK_CHANGED", function(track) B:OnTrack(track) end)
-  ns.On("SETTINGS_CHANGED", function() applySkin() end)
-  applySkin()
+  ns.On("SETTINGS_CHANGED", function() ns.SkinToast(f) end)
+  ns.SkinToast(f)
 end
 
 function B:OnTrack(track)
@@ -90,7 +73,7 @@ end
 function B:Show(track)
   if not f then return end
   anchor()
-  f.cover:SetTexture(ns.CoverOf(track) or DEFAULT_COVER)
+  f.cover:SetTexture(ns.CoverOf(track) or ns.DEFAULT_COVER)
   ns.SetText(f.title, track.title or "?", "GameFontHighlight")
   ns.SetText(f.artist, track.artist or "", "GameFontDisableSmall")
   f.fadeOut:Stop()

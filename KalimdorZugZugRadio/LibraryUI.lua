@@ -5,17 +5,14 @@ local L = ns.L
 local LUI = { selected = nil } -- selected = selected playlist name (ns.ALL = whole library)
 ns.LibraryUI = LUI
 
-local ACCENT = { 1, 0.5, 0.1 }
+local ACCENT, DEFAULT_COVER = ns.ACCENT, ns.DEFAULT_COVER
 local SMART_COLOR = { 0.55, 0.8, 1 }
-local DEFAULT_COVER = "Interface\\Icons\\INV_Misc_QuestionMark"
 local f
 
 ---------------------------------------------------------------------------
 -- Basic widgets
 ---------------------------------------------------------------------------
-local function button(parent, text, width, onClick, tooltip)
-  return ns.MakeButton(parent, text, width, onClick, tooltip)
-end
+local button = ns.MakeButton
 
 -- Widens the button enough for the translated text.
 local function fitButton(b, minWidth)
@@ -24,16 +21,7 @@ local function fitButton(b, minWidth)
   if type(w) == "number" then b:SetWidth(math.max(minWidth, w + 24)) end
 end
 
-local function checkbox(parent, size)
-  local c = CreateFrame("CheckButton", nil, parent)
-  c:SetSize(size, size)
-  c:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  c:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  c:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  if c.SetDisabledCheckedTexture then c:SetDisabledCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check-Disabled") end
-  return c
-end
+local checkbox = ns.MakeCheckbox
 
 local function editbox(parent, width)
   local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
@@ -321,10 +309,6 @@ local function filteredTracks(withSearch)
   return data
 end
 
-local function visibleTracks()
-  return filteredTracks(true)
-end
-
 local function visibleGroups()
   local q = (f.search:GetText() or ""):lower()
   local out = {}
@@ -538,7 +522,7 @@ local function buildTrackColumn()
   local function bulk(include)
     if not selectedIsUser() or inGroupView() then return end
     local ids = {}
-    for _, t in ipairs(visibleTracks()) do ids[#ids + 1] = t.file end
+    for _, t in ipairs(filteredTracks(true)) do ids[#ids + 1] = t.file end
     ns.SetManyInPlaylist(LUI.selected, ids, include)
   end
   f.addAll = button(f, L.ADD_VISIBLE, 110, function() bulk(true) end, L.TT_ADD_VISIBLE)
@@ -747,9 +731,6 @@ function LUI:Build()
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving)
   f:SetScript("OnDragStop", f.StopMovingOrSizing)
-  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-  f:SetBackdropColor(0.06, 0.05, 0.05, 0.96)
-  f:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.8)
   f:Hide()
   if UISpecialFrames then table.insert(UISpecialFrames, f:GetName()) end -- ESC closes the window
 
@@ -797,7 +778,7 @@ function LUI:RefreshTracks()
     f.groups:SetData(data)
     f.trackCount:SetText(("%d"):format(#data))
   else
-    local data = visibleTracks()
+    local data = filteredTracks(true)
     f.tracks:SetData(data)
     f.trackCount:SetText(("%d / %d"):format(#data, LUI.group and LUI.group.count or #baseTracks()))
   end

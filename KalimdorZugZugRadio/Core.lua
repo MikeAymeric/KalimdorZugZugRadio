@@ -77,9 +77,14 @@ end
 ns.perf = {} -- name -> { calls, total (ms), max (ms) }
 local clock = debugprofilestop
 
-function ns.perfCount(name)
+local function perfEntry(name)
   local e = ns.perf[name]
   if not e then e = { calls = 0, total = 0, max = 0 } ns.perf[name] = e end
+  return e
+end
+
+function ns.perfCount(name)
+  local e = perfEntry(name)
   e.calls = e.calls + 1
 end
 
@@ -90,8 +95,7 @@ function ns.Profiled(name, fn)
     local t0 = clock()
     local a, b, c = fn(...)
     local dt = clock() - t0
-    local e = ns.perf[name]
-    if not e then e = { calls = 0, total = 0, max = 0 } ns.perf[name] = e end
+    local e = perfEntry(name)
     e.calls, e.total = e.calls + 1, e.total + dt
     if dt > e.max then e.max = dt end
     return a, b, c
@@ -319,13 +323,19 @@ local function invalidate(name)
   ns.Fire("PLAYLISTS_CHANGED", name)
 end
 
+-- Virtual playlists: translation key of the label and the words that find them in /kzz playlist.
+local VIRTUAL = {
+  [ns.ALL] = { label = "ALL_LIBRARY" },
+  [ns.GAME] = { label = "GAME_MUSIC", words = { "wow", "game" } },
+  [ns.PODCAST] = { label = "PODCASTS", words = { "podcast", "podcasts" } },
+  [ns.FAV] = { label = "FAVORITES", words = { "fav", "favorites" } },
+  [ns.HISTORY] = { label = "HISTORY", words = { "history" } },
+  [ns.TOP] = { label = "TOP", words = { "top" } },
+}
+
 function ns.PlaylistLabel(name, chat)
-  if name == ns.ALL then return (chat and CL or L).ALL_LIBRARY end
-  if name == ns.GAME then return (chat and CL or L).GAME_MUSIC end
-  if name == ns.PODCAST then return (chat and CL or L).PODCASTS end
-  if name == ns.FAV then return (chat and CL or L).FAVORITES end
-  if name == ns.HISTORY then return (chat and CL or L).HISTORY end
-  if name == ns.TOP then return (chat and CL or L).TOP end
+  local v = VIRTUAL[name]
+  if v then return (chat and CL or L)[v.label] end
   local kind = ns.GroupKind(name)
   if kind then
     local pl = ns.GetPlaylist(name)
@@ -370,55 +380,61 @@ function ns.PlaylistNames()
   return names
 end
 
+-- A playlist from track ids: unknown ids and duplicates are left out.
+local function fromIds(name, ids)
+  local pl = { name = name, tracks = {}, has = {} }
+  for _, id in ipairs(ids) do
+    local t = ns.trackById[id]
+    if t and not pl.has[id] then table.insert(pl.tracks, t) pl.has[id] = true end
+  end
+  return pl
+end
+
+-- A playlist from a list of tracks (which it keeps).
+local function fromTracks(name, tracks)
+  local pl = { name = name, tracks = tracks, has = {} }
+  for _, t in ipairs(tracks) do pl.has[t.file] = true end
+  return pl
+end
+
 -- { name, tracks, has } or nil if the playlist doesn't exist.
 function ns.GetPlaylist(name)
   if not name then return nil end
   if cache[name] then return cache[name] end
   local pl
+  local kind, key = ns.GroupKind(name)
   if name == ns.ALL then
     pl = { name = name, tracks = ns.tracks, has = ns.userById }
   elseif name == ns.GAME then
     pl = { name = name, tracks = ns.gameTracks, has = ns.gameById }
   elseif name == ns.PODCAST then
     pl = { name = name, tracks = ns.episodes, has = ns.episodeById }
-  elseif name == ns.FAV or name == ns.HISTORY or name == ns.TOP then
-    pl = { name = name, tracks = {}, has = {} }
+  elseif name == ns.FAV then
+    local tracks = {}
+    for _, t in ipairs(ns.everyTrack) do if ns.db.favorites[t.file] then tracks[#tracks + 1] = t end end
+    pl = fromTracks(name, tracks)
+  elseif name == ns.HISTORY then
+    pl = fromIds(name, ns.db.history)
+  elseif name == ns.TOP then
     local ids = {}
-    if name == ns.FAV then
-      for _, t in ipairs(ns.everyTrack) do if ns.db.favorites[t.file] then ids[#ids + 1] = t.file end end
-    elseif name == ns.HISTORY then
-      ids = ns.db.history
-    else
-      for id, st in pairs(ns.db.stats) do if (st.plays or 0) > 0 and ns.trackById[id] then ids[#ids + 1] = id end end
-      table.sort(ids, function(a, b) return ns.db.stats[a].plays > ns.db.stats[b].plays end)
-      for i = #ids, 51, -1 do ids[i] = nil end
-    end
-    for _, id in ipairs(ids) do
-      local t = ns.trackById[id]
-      if t and not pl.has[id] then table.insert(pl.tracks, t) pl.has[id] = true end
-    end
-  elseif ns.GroupKind(name) then
-    pl = { name = name, tracks = {}, has = {} }
-    local kind, key = ns.GroupKind(name)
+    for id, st in pairs(ns.db.stats) do if (st.plays or 0) > 0 and ns.trackById[id] then ids[#ids + 1] = id end end
+    table.sort(ids, function(a, b) return ns.db.stats[a].plays > ns.db.stats[b].plays end)
+    for i = #ids, 51, -1 do ids[i] = nil end
+    pl = fromIds(name, ids)
+  elseif kind then
+    local tracks = {}
     for _, list in ipairs({ ns.tracks, ns.gameTracks }) do
       for _, t in ipairs(list) do
-        if ns.GroupKey(kind, t) == key then table.insert(pl.tracks, t) pl.has[t.file] = true end
+        if ns.GroupKey(kind, t) == key then tracks[#tracks + 1] = t end
       end
     end
+    pl = fromTracks(name, tracks)
   elseif ns.IsSmart(name) then
-    pl = { name = name, tracks = ns.SmartTracks(ns.db.smartPlaylists[name]), has = {} }
-    for _, t in ipairs(pl.tracks) do pl.has[t.file] = true end
+    pl = fromTracks(name, ns.SmartTracks(ns.db.smartPlaylists[name]))
+  elseif type(ns.db.playlists[name]) == "table" then
+    pl = fromIds(name, ns.db.playlists[name])
   else
-    local ids = ns.db.playlists[name]
-    if type(ids) ~= "table" then return nil end
-    pl = { name = name, tracks = {}, has = {} }
-    for _, id in ipairs(ids) do
-      local t = ns.trackById[id]
-      if t and not pl.has[id] then
-        table.insert(pl.tracks, t)
-        pl.has[id] = true
-      end
-    end
+    return nil
   end
   cache[name] = pl
   return pl
@@ -433,12 +449,12 @@ end
 function ns.FindPlaylist(name)
   if type(name) ~= "string" or name == "" then return nil end
   local lower = name:lower()
-  if name == ns.ALL then return ns.ALL end
-  if name == ns.GAME or lower == "wow" or lower == "game" or lower == L.GAME_MUSIC:lower() then return ns.GAME end
-  if name == ns.PODCAST or lower == "podcast" or lower == "podcasts" or lower == L.PODCASTS:lower() then return ns.PODCAST end
-  if name == ns.FAV or lower == "fav" or lower == "favorites" or lower == L.FAVORITES:lower() then return ns.FAV end
-  if name == ns.HISTORY or lower == "history" or lower == L.HISTORY:lower() then return ns.HISTORY end
-  if name == ns.TOP or lower == "top" or lower == L.TOP:lower() then return ns.TOP end
+  for id, v in pairs(VIRTUAL) do
+    if name == id or (v.words and lower == L[v.label]:lower()) then return id end
+    for _, w in ipairs(v.words or {}) do
+      if lower == w then return id end
+    end
+  end
   for _, loc in pairs(ns.LOCALES) do
     if loc.ALL_KEYWORD and lower == loc.ALL_KEYWORD:lower() then return ns.ALL end
   end
@@ -451,8 +467,10 @@ function ns.FindPlaylist(name)
   end
 end
 
+-- Playlist names can come from a shared text: no control characters, and every "|" stays a
+-- plain "|" (WoW reads |c, |T, |H... as color, texture and link codes; "||" is a literal "|").
 local function cleanName(name)
-  name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  name = (name or ""):gsub("%c", ""):gsub("||", "|"):gsub("|", "||"):gsub("^%s+", ""):gsub("%s+$", "")
   if name == "" or name:sub(1, 2) == "__" then return nil end -- "__..." are the virtual playlists
   return name
 end
@@ -521,19 +539,11 @@ function ns.DeletePlaylist(name)
   if ns.db.mode == name then ns.SetMode("auto") else ns.Rules:Evaluate(true) end
 end
 
--- Adds/removes a track from a user playlist.
+-- Adds/removes tracks from a user playlist (one id, or many: "add all visible tracks").
 function ns.SetInPlaylist(name, id, include)
-  local ids = ns.db.playlists[name]
-  if type(ids) ~= "table" or not ns.trackById[id] then return end
-  for i = #ids, 1, -1 do
-    if ids[i] == id then table.remove(ids, i) end
-  end
-  if include then table.insert(ids, id) end
-  invalidate(name)
-  ns.Rules:Evaluate()
+  ns.SetManyInPlaylist(name, { id }, include)
 end
 
--- Bulk version (e.g. "add all visible tracks").
 function ns.SetManyInPlaylist(name, ids, include)
   local list = ns.db.playlists[name]
   if type(list) ~= "table" then return end
@@ -1002,6 +1012,20 @@ end
 -- Profiles (per character): condition settings; playlists stay shared.
 ---------------------------------------------------------------------------
 ns.DEFAULT_PROFILE = "Default"
+-- The tables of a profile; ns.db.<field> points to the active profile's table.
+local PROFILE_FIELDS = { "assign", "disabled", "zones", "bosses", "dungeons", "volumes" }
+
+-- Deep copy of src's missing entries into dst (also used for the SavedVariables defaults).
+local function copyDefaults(dst, src)
+  for k, v in pairs(src) do
+    if dst[k] == nil then
+      dst[k] = type(v) == "table" and copyDefaults({}, v) or v
+    elseif type(v) == "table" and type(dst[k]) == "table" then
+      copyDefaults(dst[k], v)
+    end
+  end
+  return dst
+end
 
 function ns.CharacterKey()
   local name = UnitName and ns.Safe(UnitName, "player")
@@ -1013,12 +1037,9 @@ end
 local function ensureProfile(name)
   local prof = ns.db.profiles[name]
   if type(prof) ~= "table" then prof = {} ns.db.profiles[name] = prof end
-  prof.assign = type(prof.assign) == "table" and prof.assign or {}
-  prof.disabled = type(prof.disabled) == "table" and prof.disabled or {}
-  prof.zones = type(prof.zones) == "table" and prof.zones or {}
-  prof.bosses = type(prof.bosses) == "table" and prof.bosses or {}
-  prof.dungeons = type(prof.dungeons) == "table" and prof.dungeons or {}
-  prof.volumes = type(prof.volumes) == "table" and prof.volumes or {}
+  for _, field in ipairs(PROFILE_FIELDS) do
+    if type(prof[field]) ~= "table" then prof[field] = {} end
+  end
   return prof
 end
 
@@ -1026,8 +1047,7 @@ function ns.ActivateProfile(name)
   if not ns.db.profiles[name] then name = ns.DEFAULT_PROFILE end
   local prof = ensureProfile(name)
   ns.profileName = name
-  ns.db.assign, ns.db.disabled, ns.db.zones = prof.assign, prof.disabled, prof.zones
-  ns.db.bosses, ns.db.volumes, ns.db.dungeons = prof.bosses, prof.volumes, prof.dungeons
+  for _, field in ipairs(PROFILE_FIELDS) do ns.db[field] = prof[field] end
   ns.Fire("PLAYLISTS_CHANGED")
   if ns.Rules.started then ns.Rules:Evaluate(true) end
 end
@@ -1054,13 +1074,8 @@ end
 function ns.NewCharacterProfile()
   local char = ns.CharacterKey() or "Character"
   local src = ensureProfile(ns.profileName or ns.DEFAULT_PROFILE)
-  local copy = { assign = {}, disabled = {}, zones = {}, bosses = {}, volumes = {}, dungeons = {} }
-  for k, v in pairs(src.assign) do copy.assign[k] = v end
-  for k, v in pairs(src.disabled) do copy.disabled[k] = v end
-  for k, v in pairs(src.zones) do copy.zones[k] = { playlist = v.playlist, name = v.name } end
-  for k, v in pairs(src.bosses) do copy.bosses[k] = { playlist = v.playlist, name = v.name } end
-  for k, v in pairs(src.dungeons) do copy.dungeons[k] = { playlist = v.playlist, name = v.name } end
-  for k, v in pairs(src.volumes) do copy.volumes[k] = v end
+  local copy = {}
+  for _, field in ipairs(PROFILE_FIELDS) do copy[field] = copyDefaults({}, src[field]) end
   ns.db.profiles[char] = copy
   ns.SetCharacterProfile(char)
 end
@@ -1128,7 +1143,7 @@ function ns.ImportPlaylist(text)
   if not ok or not raw or raw == "" then return nil, "MSG_IMPORT_BAD" end
   local lines = {}
   for line in (raw .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
-  local base = lines[1] ~= "" and lines[1] or "Imported"
+  local base = cleanName(lines[1]) or "Imported"
   local name, n = base, 2
   while ns.FindPlaylist(name) do name = ("%s (%d)"):format(base, n) n = n + 1 end
   local created = ns.CreatePlaylist(name)
@@ -1192,17 +1207,6 @@ end
 ---------------------------------------------------------------------------
 -- Initialization
 ---------------------------------------------------------------------------
-local function copyDefaults(dst, src)
-  for k, v in pairs(src) do
-    if dst[k] == nil then
-      dst[k] = type(v) == "table" and copyDefaults({}, v) or v
-    elseif type(v) == "table" and type(dst[k]) == "table" then
-      copyDefaults(dst[k], v)
-    end
-  end
-  return dst
-end
-
 -- Internal state for diagnosis (/kzz debug); also saved to KZZR_DB.lastDebug.
 function ns.DebugLines()
   local function s(v) return tostring(v) end
@@ -1266,7 +1270,7 @@ end)
 ns.RegisterEvent("PLAYER_LOGOUT", function()
   pcall(function() ns.db.lastPerf = ns.PerfReport() end)
   ns.Player:RestoreVolume()
-  ns.db.assign, ns.db.disabled, ns.db.zones, ns.db.bosses, ns.db.volumes, ns.db.dungeons = nil, nil, nil, nil, nil, nil
+  for _, field in ipairs(PROFILE_FIELDS) do ns.db[field] = nil end
 end)
 
 ns.RegisterEvent("PLAYER_LOGIN", function()

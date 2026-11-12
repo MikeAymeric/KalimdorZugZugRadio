@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -462,15 +463,21 @@ def guess_from_filename(stem: str) -> tuple[str, str]:
     return "", stem
 
 
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
+
+
 def lua_str(s: str) -> str:
-    s = s.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", " ")
+    """A Lua string literal. Tags come from any file or feed, so nothing may end the literal early:
+    backslashes and quotes are escaped, control characters (newlines included) become a space."""
+    s = CONTROL_CHARS.sub(" ", s.replace("\\", "\\\\").replace('"', '\\"'))
     return f'"{s}"'
 
 
 def lua_text(s: str) -> str:
     """Displayed text: NFC, because WoW draws decomposed marks (e.g. macOS file names) as separate glyphs.
+    '|' is doubled: WoW reads |c, |T, |H... as color, texture and link codes, '||' is a plain '|'.
     Not for `file`, which must match the name on disk and is the track id."""
-    return lua_str(unicodedata.normalize("NFC", s))
+    return lua_str(unicodedata.normalize("NFC", s).replace("|", "||"))
 
 
 def wow_path(p: Path) -> str:
@@ -575,14 +582,33 @@ PODCASTS_TEMPLATE = """# Kalimdor ZugZug Radio - podcasts to download with: pyth
 """
 
 
+MAX_PAGE_BYTES = 50 * 1024 * 1024        # feeds and API answers
+MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024  # one episode or cover
+
+
 def http_get(url: str, dst: Path | None = None, timeout: int = 60) -> bytes | None:
+    """Downloads a web page (returned) or a file (saved to dst). Only http(s): a feed must not be able
+    to make the script read local files (file://) or other protocols. Sizes are capped, so a broken or
+    hostile server can't fill the disk."""
     import urllib.request
+    from urllib.parse import urlsplit
+    if urlsplit(url).scheme.lower() not in ("http", "https"):
+        raise RuntimeError(f"not a web address: {url[:80]}")
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    limit = MAX_PAGE_BYTES if dst is None else MAX_DOWNLOAD_BYTES
     with urllib.request.urlopen(req, timeout=timeout) as r:
         if dst is None:
-            return r.read()
+            data = r.read(limit + 1)
+            if len(data) > limit:
+                raise RuntimeError("the answer is too large")
+            return data
+        written = 0
         with open(dst, "wb") as f:
-            shutil.copyfileobj(r, f, 1024 * 256)
+            while chunk := r.read(1024 * 256):
+                written += len(chunk)
+                if written > limit:
+                    raise RuntimeError("the file is too large")
+                f.write(chunk)
     return None
 
 
@@ -729,8 +755,9 @@ def update_podcasts(stats: dict) -> None:
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        # episodes older than the ones to keep are deleted
-        for d in show_dir.iterdir():
+        # episodes older than the ones to keep are deleted (not when the feed came back empty:
+        # a server error page must not wipe the downloaded episodes)
+        for d in (show_dir.iterdir() if wanted else ()):
             meta = d / EPISODE_FILE
             if d.is_dir() and meta.exists():
                 if json.loads(meta.read_text(encoding="utf-8")).get("key") not in wanted:
@@ -1001,9 +1028,7 @@ def find_missing(library: Path) -> list[Path]:
 
 
 def describe_missing(missing: list[Path], limit: int = 15) -> None:
-    by_folder: dict[str, int] = {}
-    for p in missing:
-        by_folder[p.parent.as_posix()] = by_folder.get(p.parent.as_posix(), 0) + 1
+    by_folder = Counter(p.parent.as_posix() for p in missing)
     print(f" {len(missing)} new tracks in {len(by_folder)} folder{'' if len(by_folder) == 1 else 's'}:")
     for name, n in sorted(by_folder.items())[:limit]:
         print(f"   {n:4}  {'(top folder)' if name == '.' else name}")
@@ -1278,9 +1303,7 @@ def main() -> None:
           + (f", {genres_fixed} corrected from the originals in {Path(covers_source)}" if genres_fixed else "") + ".")
     missing = [t for t in tracks if not t["cover"] and not t.get("episode")]
     if missing:
-        by_folder: dict[str, int] = {}
-        for t in missing:
-            by_folder[t["folder"] or "(music)"] = by_folder.get(t["folder"] or "(music)", 0) + 1
+        by_folder = Counter(t["folder"] or "(music)" for t in missing)
         print(f"Tracks without a cover: {len(missing)} in {len(by_folder)} folder{'' if len(by_folder) == 1 else 's'}"
               + ("" if covers_source else
                  " (if the originals still have it, run again with --covers-from \"<folder with the originals>\")")

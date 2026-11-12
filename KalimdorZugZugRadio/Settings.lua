@@ -6,7 +6,7 @@ local L = ns.L
 local S = {}
 ns.Settings = S
 
-local ACCENT = { 1, 0.5, 0.1 }
+local ACCENT = ns.ACCENT
 local panel, category
 
 local function text(parent, template)
@@ -15,16 +15,8 @@ end
 
 -- Checkbox with a label; onToggle(checked).
 local function checkOption(parent, label, x, y, onToggle, template, tooltip)
-  local c = CreateFrame("CheckButton", nil, parent)
-  c:SetSize(24, 24)
+  local c = ns.MakeCheckbox(parent, 24, label, template)
   c:SetPoint("TOPLEFT", x, y)
-  c:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  c:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  c:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  c.label = text(parent, template or "GameFontHighlight")
-  c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
-  c.label:SetText(label)
   c:SetScript("OnClick", function(self) onToggle(self:GetChecked() and true or false) end)
   if tooltip then
     c:SetScript("OnEnter", function(self) ns.ShowTooltip(self, "ANCHOR_RIGHT", { label, tooltip }) end)
@@ -51,10 +43,6 @@ end
 local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 762
 local ROWS_PER_COLUMN = 8
 
-local function playlistMenu(root, isSelected, select, noneLabel)
-  ns.PlaylistMenu(root, isSelected, select, noneLabel)
-end
-
 -- Submenu with a playlist for each boss / dungeon met so far (seen: id -> name).
 local function specificMenu(root, title, emptyLabel, seen, assigned, assign)
   local menu = root:CreateButton(title)
@@ -67,7 +55,7 @@ local function specificMenu(root, title, emptyLabel, seen, assigned, assign)
     local pl = assigned[id] and assigned[id].playlist
     local entry = menu:CreateButton(seen[id] .. (pl and ("  -  " .. ns.PlaylistLabel(pl)) or ""))
     ns.StyleMenuItem(entry, ns.TextFont(seen[id]))
-    playlistMenu(entry, function(name) return (assigned[id] and assigned[id].playlist) == name end,
+    ns.PlaylistMenu(entry, function(name) return (assigned[id] and assigned[id].playlist) == name end,
       function(name) assign(id, name) end, L.ASSIGN_GENERAL)
   end
 end
@@ -169,18 +157,7 @@ local function build(p)
   local langLabel = text(c, "GameFontNormal")
   langLabel:SetPoint("TOPLEFT", 20, -314)
   langLabel:SetText(L.LANGUAGE)
-  -- CJK language names always use a bundled font, so they are readable on any client
-  p.lang = ns.MakeDropdown(c, 200, L.LANG_AUTO, function(_, root)
-    ns.StyleMenuItem(root:CreateRadio(L.LANG_AUTO,
-      function() return ns.db.lang == nil end,
-      function() ns.SetLanguage(nil) S:Refresh() end))
-    root:CreateDivider()
-    for _, code in ipairs(ns.LANG_ORDER) do
-      ns.StyleMenuItem(root:CreateRadio(ns.LANGUAGE_NAMES[code],
-        function() return ns.db.lang == code end,
-        function() ns.SetLanguage(code) S:Refresh() end), code == "koKR" and "ko" or ns.CJK_LANG[code])
-    end
-  end)
+  p.lang = ns.LanguageDropdown(c, function() S:Refresh() end)
   if p.lang then p.lang:SetPoint("LEFT", langLabel, "RIGHT", 12, 0) end
   p.reload = ns.MakeButton(c, L.RELOAD, 130, function() ReloadUI() end)
   p.reload:SetPoint("LEFT", p.lang or langLabel, "RIGHT", 12, 0)
@@ -217,7 +194,7 @@ local function build(p)
     row.check.label:SetJustifyH("LEFT")
     row.check.label:SetWordWrap(false)
     row.dropdown = ns.MakeDropdown(c, 150, L.NONE, function(_, root)
-      playlistMenu(root, function(name) return ns.AssignedTo(s.key) == name end,
+      ns.PlaylistMenu(root, function(name) return ns.AssignedTo(s.key) == name end,
         function(name) ns.Assign(s.key, name) end)
       root:CreateDivider()
       -- volume of this condition (multiplies the player's volume)
@@ -296,7 +273,7 @@ function S:Refresh()
   panel.optZoneBreaks:SetChecked(ns.db.zoneBreaks)
   panel.optMinimap:SetChecked(not ns.db.minimap.hide)
   panel.optLock:SetChecked(ns.db.ui.locked)
-  panel.optClassic:SetChecked((ns.db.ui.skin or "classic") == "classic")
+  panel.optClassic:SetChecked(ns.IsClassicSkin())
   panel.optCrossfade:SetChecked(ns.db.crossfade)
   panel.optBanner:SetChecked(ns.db.ui.banner)
   panel.optAfk:SetChecked(ns.db.afkPause)

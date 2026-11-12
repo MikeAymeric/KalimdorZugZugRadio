@@ -34,14 +34,21 @@ local function buildQueue(tracks, first)
       q[i], q[j] = q[j], q[i]
     end
   end
-  if ns.db.shuffle then
-    if first then
-      for i, v in ipairs(q) do
-        if v == first then q[1], q[i] = q[i], q[1] break end
-      end
+  if ns.db.shuffle and first then
+    for i, v in ipairs(q) do
+      if v == first then q[1], q[i] = q[i], q[1] break end
     end
   end
   return q
+end
+
+-- Next position of a queue; past the end a new (reshuffled) queue starts.
+local function advance(st, pl)
+  st.pos = st.pos + 1
+  if st.pos > #st.queue then
+    st.queue = buildQueue(pl.tracks)
+    st.pos = 1
+  end
 end
 
 local function indexOf(tracks, track)
@@ -183,11 +190,7 @@ local function freshTrack(name)
   local st, pl = getState(name)
   if not st.started or #st.queue < 2 then return end
   if ns.db.shuffle then
-    st.pos = st.pos + 1
-    if st.pos > #st.queue then
-      st.queue = buildQueue(pl.tracks)
-      st.pos = 1
-    end
+    advance(st, pl)
   else
     local r = math.random(#st.queue - 1)
     st.pos = r >= st.pos and r + 1 or r
@@ -480,12 +483,7 @@ function P:Next(auto)
   self.fromQueue = false
   local queued = takeQueued()
   if queued then self:Play(nil, queued) return end
-  local st, pl = getState(self.playlist)
-  st.pos = st.pos + 1
-  if st.pos > #st.queue then
-    st.queue = buildQueue(pl.tracks)
-    st.pos = 1
-  end
+  advance(getState(self.playlist))
   self:Play()
 end
 

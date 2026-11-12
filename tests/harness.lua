@@ -1007,5 +1007,19 @@ do
   check("library views and smart editor", ok)
   ns.LibraryUI:Toggle(false)
 end
+do
+  -- a shared playlist can't smuggle WoW escape codes (|c colors, |H links) or control characters
+  local evil = "!KZZR1!" .. ns.Base64Encode("|cffff0000Fake|r\r|Hurl:x|hlink|h\nmusic\\a.ogg")
+  local name = ns.ImportPlaylist(evil)
+  check("imported name: escape codes neutralized", name == "||cffff0000Fake||r||Hurl:x||hlink||h")
+  check("typed '||' stays a single literal pipe", ns.CreatePlaylist("Rock || Metal") == "Rock || Metal")
+  -- removing an id the library no longer has still works
+  table.insert(ns.db.playlists[name], "music\\gone.ogg")
+  ns.SetInPlaylist(name, "music\\gone.ogg", false)
+  local left = false
+  for _, id in ipairs(ns.db.playlists[name]) do if id == "music\\gone.ogg" then left = true end end
+  check("missing track can be removed from a playlist", not left)
+  ns.DeletePlaylist(name); ns.DeletePlaylist("Rock || Metal")
+end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

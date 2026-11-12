@@ -246,7 +246,6 @@ local function queueEvaluate()
     R:Evaluate()
   end)
 end
-R.QueueEvaluate = queueEvaluate
 
 local function on(event, fn)
   ns.RegisterEvent(event, ns.Profiled("event:" .. event, function(...)
@@ -295,7 +294,8 @@ function R:Start()
   on("UNIT_SPELLCAST_CHANNEL_STOP", function(unit)
     if unit == "player" and state.fishing then fishingUntil = GetTime() + FISHING_GRACE end
   end)
-  for _, ev in ipairs({ "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED" }) do
+  for _, ev in ipairs({ "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED",
+                        "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED", "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA" }) do
     on(ev, updateWorld)
   end
   on("ENCOUNTER_END", function()
@@ -331,9 +331,6 @@ function R:Start()
     state.encounter, state.bossTail = false, false
     updateWorld()
   end)
-  for _, ev in ipairs({ "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED", "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA" }) do
-    on(ev, updateWorld)
-  end
 
   -- Safety net: some states (taxi, movement) have no reliable events.
   C_Timer.NewTicker(1, ns.Profiled("ticker", function()

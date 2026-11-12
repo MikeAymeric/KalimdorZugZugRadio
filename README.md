@@ -213,6 +213,12 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 - `tests/`: run `npm install`, then `npm test` (the addon logic in a Lua VM with simulated WoW APIs) and `npm run lint` (Lua syntax check).
 - `RadioProbe/`: a small addon that checks which game APIs work on the client.
 
+## AI disclosure
+
+This addon was built with the help of an AI coding assistant (Anthropic's Claude, through Claude Code). The idea, the design and every decision about features are mine, and I test each version in game on WoW Forever, reporting bugs back until things work the way I want. Most of the code, the test suite and the translations were written by the AI under my direction, and checked with the automated tests and in-game play.
+
+The addon ships no AI-generated music, covers or artwork: you play your own music files or the game's official soundtrack. The translations into the 11 languages other than English were machine-generated: if you are a native speaker and spot something odd, please open an issue.
+
 ## License
 
 Code: [MIT](LICENSE) © 2026 MikeAymeric.

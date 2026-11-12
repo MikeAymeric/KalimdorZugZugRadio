@@ -36,16 +36,8 @@ local function paragraph(parent, template, y, height)
 end
 
 local function check(parent, x, y, label, onClick)
-  local c = CreateFrame("CheckButton", nil, parent)
-  c:SetSize(24, 24)
+  local c = ns.MakeCheckbox(parent, 24, label)
   c:SetPoint("TOPLEFT", x, y)
-  c:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  c:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  c:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  c.label = text(parent, "GameFontHighlight")
-  c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
-  c.label:SetText(label)
   c:SetScript("OnClick", function(self) onClick(self, self:GetChecked() and true or false) end)
   return c
 end
@@ -109,15 +101,7 @@ local function buildWelcome(p)
   local label = text(p, "GameFontNormal")
   label:SetPoint("TOPLEFT", 24, -134)
   label:SetText(L.LANGUAGE)
-  p.lang = ns.MakeDropdown(p, 200, L.LANG_AUTO, function(_, root)
-    ns.StyleMenuItem(root:CreateRadio(L.LANG_AUTO, function() return ns.db.lang == nil end,
-      function() ns.SetLanguage(nil) O:Refresh() end))
-    root:CreateDivider()
-    for _, code in ipairs(ns.LANG_ORDER) do
-      ns.StyleMenuItem(root:CreateRadio(ns.LANGUAGE_NAMES[code], function() return ns.db.lang == code end,
-        function() ns.SetLanguage(code) O:Refresh() end), code == "koKR" and "ko" or ns.CJK_LANG[code])
-    end
-  end)
+  p.lang = ns.LanguageDropdown(p, function() O:Refresh() end)
   if p.lang then p.lang:SetPoint("LEFT", label, "RIGHT", 12, 0) end
   p.reload = ns.MakeButton(p, L.RELOAD, 130, function() ReloadUI() end)
   p.reload:SetPoint("LEFT", p.lang or label, "RIGHT", 12, 0)

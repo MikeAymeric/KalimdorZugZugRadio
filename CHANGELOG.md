@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+- **Safer podcast downloads**: Import music.py only downloads from web addresses (http/https), so a podcast feed can no longer make it copy a file from your PC into the music folder, and downloads have a size limit (2 GB per episode).
+- A podcast feed that comes back empty (for example a temporary server error) no longer deletes the episodes you already downloaded.
+- Titles, artists, albums and playlist names containing `|` are shown as written. WoW reads `|c`, `|T` and `|H` as color, icon and link codes, so a file's tags or a shared playlist could show fake colored text or links. Run Import music.py again to apply it to your library.
+- A track that is no longer in the library can now be removed from a playlist.
+- Code cleanup: shared widgets for the windows, less duplicated logic. Nothing changes in how the addon works.
+
 ## 1.0.0
 
 - **Welcome guide**: a short step-by-step window (language, music source, ready-made playlists, tour) opens once for everyone. The *Tutorial* button in the settings and `/kzz tutorial` open it again.
