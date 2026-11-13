@@ -150,12 +150,14 @@ function R:ActiveSet()
   return t
 end
 
--- First active condition (by priority) that has a playlist.
+-- First active condition (by priority) that has a playlist. A condition set to the game's zone
+-- music wins like any other, with no playlist: the player stops and the game's music plays.
 function R:Resolve()
   local active = self:ActiveSet()
   for _, s in ipairs(ns.SITUATIONS) do
     if active[s.key] then
       local pl = ns.PlaylistFor(s.key)
+      if pl == ns.ZONEMUSIC then return s.key, nil end
       if pl then return s.key, pl end
     end
   end

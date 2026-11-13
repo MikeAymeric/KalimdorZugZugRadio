@@ -456,23 +456,15 @@ function P:Toggle(forcePlay)
   if not self:Play() then ns.Rules:Evaluate(true) end
 end
 
--- A manual choice (next/previous) takes precedence over conditions:
--- in automatic mode we switch to free play of the current playlist,
--- until the user goes back to "Automatic".
-local function takeManualControl()
-  if ns.db.mode == "auto" and P.playlist then
-    ns.db.mode = P.playlist
-    ns.Rules:Reset()
-    ns.Fire("MODE_CHANGED", P.playlist)
-  end
-end
+-- Next/previous only change the track: in automatic mode the conditions keep deciding the
+-- playlist (before 1.3 they switched to free play, which users took for a broken combat music).
+-- Free play only comes from choosing a playlist.
 
 -- auto = true when called by the end-of-track timer (not a user choice).
 -- On a podcast it advances one part; after the last one the episode is done and we move on.
 function P:Next(auto)
   if not playable(self.playlist) then return end
   if not auto then
-    takeManualControl()
     if self.playing then ns.RecordSkip(self.track, self:ElapsedInPart()) end
   end
   local t = self.track
@@ -496,7 +488,6 @@ end
 -- remaining parts of a podcast episode (its progress is kept, to resume it later).
 function P:SkipTrack(dir)
   if not playable(self.playlist) then return end
-  takeManualControl()
   if dir > 0 and self.playing then ns.RecordSkip(self.track, self:ElapsedInPart()) end
   local wasQueued = self.fromQueue
   self.fromQueue = false
@@ -515,7 +506,6 @@ end
 -- previous part (podcast) or the previous track.
 function P:Prev()
   if not playable(self.playlist) then return end
-  takeManualControl()
   if self.playing and self:ElapsedInPart() > 3 then self:Play() return end
   local t = self.track
   if t and t.parts and ns.EpisodePart(t) > 1 then

@@ -263,11 +263,19 @@ check("game music played via FileDataID", playing == 53198 and ns.CoverOf(ns.Pla
 ns.CreatePlaylist("Horde"); ns.SetInPlaylist("Horde", "game:53198", true); ns.SetInPlaylist("Horde", "music\\b.ogg", true)
 ns.SetMode("auto"); ns.Assign("idle", "Horde"); advance(5)
 check("user playlist with game music and own tracks", ns.Player.playlist == "Horde" and (playing == 53198 or is("b.ogg")))
--- precedence: manual next/previous = free play, conditions don't interrupt
+-- precedence: next/previous only change the track; choosing a playlist = free play
 ns.Player:Next()
-check("manual next -> free play", ns.db.mode == "Horde")
+check("manual next stays automatic", ns.db.mode == "auto" and ns.Player.playlist == "Horde")
+ns.Player:Prev()
+check("manual previous stays automatic", ns.db.mode == "auto")
+G.combat = true; ns.Assign("combat", "Fight"); fire("PLAYER_REGEN_DISABLED"); advance(1)
+check("combat music after a manual next", ns.Player.playlist == "Fight")
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+check("back to the idle playlist after the fight", ns.Player.playlist == "Horde" and ns.db.mode == "auto")
+ns.PlayFrom("Horde", ns.trackById["game:53198"])
+check("choosing a playlist -> free play", ns.db.mode == "Horde")
 local before = playing
-G.combat = true; ns.Assign("combat", "Fight"); fire("PLAYER_REGEN_DISABLED")
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
 check("elite/combat doesn't interrupt the manual choice", playing == before and ns.Player.playlist == "Horde")
 G.combat = false; fire("PLAYER_REGEN_ENABLED")
 ns.SetMode("auto"); advance(5)
@@ -992,7 +1000,7 @@ do
 
   -- status line
   check("status line: no repeated condition", ns.UI.AutoStatus("campfire", "Fire") == "Auto  ·  Campfire  ·  Fire"
-    and ns.UI.AutoStatus("campfire", nil) == "Auto  ·  Campfire")
+    and ns.UI.AutoStatus("campfire", nil) == "Auto  ·  Campfire  ·  zone music")
   ns.CreatePlaylist("OST - Campfire")
   check("status line: playlist named after the condition", ns.UI.AutoStatus("campfire", "OST - Campfire") == "Auto  ·  OST - Campfire")
   ns.DeletePlaylist("OST - Campfire")
@@ -1080,6 +1088,34 @@ do
   ns.DeletePlaylist("Boars 2"); ns.DeletePlaylist("Beasts")
   check("deleting a playlist removes enemy assignments", ns.FoePlaylist("combat", "type:enUS:Beast") == nil)
   G.family, G.familyId, G.ctype, G.ctypeId = nil, nil, nil, nil
+end
+-- "Game zone music" as a condition's choice: the game's own music plays, and lower conditions
+-- don't take over
+do
+  ns.SetMode("auto"); ns.Player.userStopped = false; ns.Player:EndZoneBreak()
+  local zonePl = ns.ZonePlaylist(); ns.Assign("zone", nil) -- the current zone has its own playlist
+  ns.Assign("combat", "Fight"); ns.Assign("idle", "Fight"); advance(5)
+  check("idle playlist before the zone music test", ns.Player.playlist == "Fight" and playing ~= nil)
+  ns.Assign("idle", ns.ZONEMUSIC); advance(5)
+  check("idle set to zone music -> the game's music", playing == nil and ns.Player.playlist == nil
+    and ns.Rules.current == "idle" and ns.PlaylistFor("idle") == ns.ZONEMUSIC)
+  check("zone music in the status line", ns.UI.AutoStatus("idle", nil):find(ns.L.ZONE_MUSIC, 1, true) ~= nil)
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("combat plays its playlist over zone music", ns.Player.playlist == "Fight" and playing ~= nil)
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+  check("after the fight the game's music again", playing == nil and ns.Rules.current == "idle")
+  ns.Assign("idle", "Fight"); ns.Assign("town", ns.ZONEMUSIC); G.resting = true; fire("PLAYER_UPDATE_RESTING"); advance(6)
+  check("town set to zone music wins over the idle playlist", playing == nil and ns.Rules.current == "town")
+  G.resting = false; fire("PLAYER_UPDATE_RESTING"); advance(6)
+  check("leaving town brings the idle playlist back", ns.Player.playlist == "Fight" and playing ~= nil)
+  check("zone music label", ns.PlaylistLabel(ns.ZONEMUSIC) == ns.L.GAME_ZONE_MUSIC)
+  local line
+  for _, l in ipairs(ns.DebugLines()) do if l:find("assign:", 1, true) then line = l end end
+  check("debug lists the assignments", line and line:find("combat=Fight", 1, true) and line:find("town=Game zone music", 1, true))
+  ns.SetConditionEnabled("combat", false)
+  for _, l in ipairs(ns.DebugLines()) do if l:find("assign:", 1, true) then line = l end end
+  check("debug shows a disabled condition", line:find("combat=off", 1, true) ~= nil)
+  ns.SetConditionEnabled("combat", true); ns.Assign("town", nil); ns.Assign("zone", zonePl)
 end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

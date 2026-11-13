@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- **Game zone music as a choice**: every condition (and every zone, boss, dungeon or enemy) can be set to *Game zone music*. The game's own soundtrack then plays there, and the addon only takes over where you gave a playlist, for example combat, swimming or dungeons. Unlike *None*, it doesn't fall back to a lower condition: a city set to *Game zone music* plays the city's music even if *No condition* has a playlist.
+- **Next and Previous no longer switch to free play**: they only change the track, and the conditions keep choosing the music, so combat music still starts after you skipped a song. Free play still starts when you pick a playlist.
+- `/kzz debug` now lists the playlist of every condition, to help with bug reports.
+
 ## 1.2.0
 
 - **Music for each kind of enemy**: in the Combat and Elite conditions, *Specific enemies* gives a beast family (boar, wolf, wind serpent, spider...) or a creature type (beast, humanoid, undead, demon, elemental...) its own playlist. The first enemy you target in a fight decides it, and the song lasts the whole fight. A family wins over a type, and enemies without a playlist of their own use the normal combat music.

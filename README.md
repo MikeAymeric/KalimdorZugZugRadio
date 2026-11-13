@@ -122,7 +122,7 @@ Spotify-exclusive podcasts have no RSS feed and can't be downloaded.
 ### Automatic music and free play
 
 - **Automatic (conditions)**: the music follows what your character is doing, using the playlists assigned in the settings.
-- **Free play**: as soon as you choose the music yourself (a playlist from the dropdown, **>** on a track, or next/previous), your choice wins over every condition, bosses included, until you select *Automatic (conditions)* again. The player shows *Free play* in orange.
+- **Free play**: as soon as you choose the music yourself (a playlist from the dropdown, or **>** on a track), your choice wins over every condition, bosses included, until you select *Automatic (conditions)* again. The player shows *Free play* in orange.
 
 ### The library
 
@@ -143,6 +143,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
 - **Smart shuffle** (on by default): tracks you skip early and the ones you just heard come up less often, tracks you have never heard more often. No track is ever left out.
 - **Music after a fight**: how long the fight music keeps playing, slowly fading out, before the next condition (4 to 10 seconds; 4 after a boss). If you start another fight meanwhile, the song goes on. Every new fight starts a different song.
 - **Zone music between tracks** (off by default): in calm conditions (no condition, zone, city, night, mounted) the game's own zone music plays every few tracks for a few minutes. Some areas have long silences or no zone music.
+- **Next / previous** only change the track: in automatic mode the conditions keep choosing the music.
 - **Conditions**: tick the ones you want and choose a playlist for each. The first active condition from the top wins:
 
   | Priority | Condition | When |
@@ -165,6 +166,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
   | 16 | No condition | Everything else |
 
   Each condition's menu also has a **Volume** submenu (100% to 20%). If no active condition has a playlist, the game's own zone music plays.
+  Instead of a playlist you can choose **Game zone music** for a condition (or a zone, boss, dungeon or enemy): the game's own soundtrack plays there. Unlike *None*, it doesn't fall back to a lower condition, so a city set to *Game zone music* plays the city's music even if *No condition* has a playlist.
 - **Profiles**: the condition settings belong to a profile. *Default* is shared by all your characters; *New profile for this character* creates one just for the current character. Playlists are always shared.
 
 Settings can't be opened during combat (a limitation of the game's Options window).

@@ -104,6 +104,8 @@ end
 -- Radio list of every playlist plus "none" (noneLabel, default L.NONE), for assignments.
 function ns.PlaylistMenu(root, isSelected, select, noneLabel)
   ns.StyleMenuItem(root:CreateRadio(noneLabel or L.NONE, function() return isSelected(nil) end, function() select(nil) end))
+  ns.StyleMenuItem(root:CreateRadio(L.GAME_ZONE_MUSIC, function() return isSelected(ns.ZONEMUSIC) end,
+    function() select(ns.ZONEMUSIC) end))
   for _, name in ipairs(ns.AllPlaylistNames()) do
     ns.StyleMenuItem(root:CreateRadio(("%s (%d)"):format(ns.PlaylistLabel(name), #ns.GetPlaylist(name).tracks),
       function() return isSelected(name) end, function() select(name) end), ns.TextFont(name))
@@ -673,10 +675,11 @@ function UI:RefreshProgress()
 end
 
 -- "Auto · <condition> · <playlist>"; the condition is left out when the playlist's name already
--- says it (a playlist called "Campfire", or the ready-made "OST - Campfire").
+-- says it (a playlist called "Campfire", or the ready-made "OST - Campfire"). A condition with
+-- no playlist is set to the game's zone music.
 function UI.AutoStatus(key, playlist)
   local cond = key and ns.SituationLabel(key) or L.ZONE_MUSIC
-  if not playlist then return L.STATUS_AUTO .. "  ·  " .. cond end
+  if not playlist then return L.STATUS_AUTO .. "  ·  " .. cond .. (key and ("  ·  " .. L.ZONE_MUSIC) or "") end
   local label = ns.PlaylistLabel(playlist)
   if label:lower():find(cond:lower(), 1, true) then return L.STATUS_AUTO .. "  ·  " .. label end
   return L.STATUS_AUTO .. "  ·  " .. cond .. "  ·  " .. label
@@ -706,7 +709,10 @@ function UI:Refresh()
     f.cover:SetTexture(ns.CoverOf(track) or DEFAULT_COVER)
   else
     f.title:SetText(L.NO_TRACK)
-    if #ns.tracks == 0 and #ns.episodes == 0 then
+    if ns.db.mode == "auto" and ns.Rules.current and not P.playlist then
+      f.title:SetText(L.GAME_ZONE_MUSIC) -- a condition set to the game's music
+      f.artist:SetText("")
+    elseif #ns.tracks == 0 and #ns.episodes == 0 then
       f.artist:SetText(L.HINT_EMPTY_LIBRARY)
     elseif ns.db.mode == "auto" then
       f.artist:SetText(L.HINT_NO_PLAYLIST)

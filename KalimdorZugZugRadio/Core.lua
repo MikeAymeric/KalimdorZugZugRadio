@@ -225,6 +225,9 @@ ns.PODCAST = "__podcast" -- virtual playlist with podcast episodes, newest first
 ns.FAV = "__fav"         -- favourites
 ns.HISTORY = "__history" -- recently played
 ns.TOP = "__top"         -- most played
+-- Not a playlist: assigned to a condition, it plays the game's own zone music (StopMusic) and
+-- stops lower conditions from taking over. Never a playing queue nor a free-play mode.
+ns.ZONEMUSIC = "__zonemusic"
 -- Podcast episodes are split into parts (Library.lua: episode/part/parts fields): here they become
 -- a single track with t.parts = { {file, duration}, ... } and id "ep:<key>".
 
@@ -336,6 +339,7 @@ local VIRTUAL = {
 }
 
 function ns.PlaylistLabel(name, chat)
+  if name == ns.ZONEMUSIC then return (chat and CL or L).GAME_ZONE_MUSIC end
   local v = VIRTUAL[name]
   if v then return (chat and CL or L)[v.label] end
   local kind = ns.GroupKind(name)
@@ -445,6 +449,11 @@ end
 function ns.IsPlayable(name)
   local pl = ns.GetPlaylist(name)
   return pl ~= nil and #pl.tracks > 0
+end
+
+-- What a condition can be given: a playable playlist, or the game's zone music.
+function ns.IsAssignable(name)
+  return name == ns.ZONEMUSIC or ns.IsPlayable(name)
 end
 
 -- Case-insensitive lookup for slash commands ("all" or its translation = the whole library).
@@ -813,7 +822,7 @@ function ns.ZoneCount()
   return n
 end
 
--- Playlist assigned to a condition (nil = none, empty, or condition disabled).
+-- Playlist assigned to a condition (nil = none, empty, or condition disabled; ns.ZONEMUSIC = the game's music).
 function ns.PlaylistFor(key)
   if ns.db.disabled[key] then return nil end
   local name
@@ -824,18 +833,18 @@ function ns.PlaylistFor(key)
     local R = ns.Rules
     for _, foe in ipairs({ R.foeFamily or false, R.foeType or false }) do
       local e = foe and ns.db.foes[key .. "|" .. foe]
-      if e and ns.IsPlayable(e.playlist) then name = e.playlist break end
+      if e and ns.IsAssignable(e.playlist) then name = e.playlist break end
     end
     name = name or ns.db.assign[key]
   elseif key == "boss" or key == "dungeon" then
     -- a playlist for this specific boss / dungeon wins over the generic one
     local id = key == "boss" and ns.Rules.encounterID or (key == "dungeon" and ns.Rules.dungeonID)
     local specific = id and (key == "boss" and ns.db.bosses or ns.db.dungeons)[id]
-    name = (specific and ns.IsPlayable(specific.playlist)) and specific.playlist or ns.db.assign[key]
+    name = (specific and ns.IsAssignable(specific.playlist)) and specific.playlist or ns.db.assign[key]
   else
     name = ns.db.assign[key]
   end
-  if name and ns.IsPlayable(name) then return name end
+  if name and ns.IsAssignable(name) then return name end
   return nil
 end
 
@@ -1272,6 +1281,21 @@ end
 ---------------------------------------------------------------------------
 -- Initialization
 ---------------------------------------------------------------------------
+-- "condition=playlist" for every condition of the active profile: "off" = disabled,
+-- "(empty)" = nothing playable in it, "-" = none. Specific bosses/dungeons/enemies/zones are counted.
+function ns.DebugAssignments()
+  local parts = {}
+  for _, s in ipairs(ns.SITUATIONS) do
+    local name = ns.AssignedTo(s.key)
+    local text = name and (ns.PlaylistLabel(name, true) .. (ns.IsAssignable(name) and "" or " (empty)")) or "-"
+    if ns.db.disabled[s.key] then text = "off" end
+    parts[#parts + 1] = s.key .. "=" .. text
+  end
+  local function count(t) local n = 0 for _ in pairs(t or {}) do n = n + 1 end return n end
+  return ("%s; specific: zones %d, bosses %d, dungeons %d, enemies %d"):format(table.concat(parts, ", "),
+    count(ns.db.zones), count(ns.db.bosses), count(ns.db.dungeons), count(ns.db.foes))
+end
+
 -- Internal state for diagnosis (/kzz debug); also saved to KZZR_DB.lastDebug.
 function ns.DebugLines()
   local function s(v) return tostring(v) end
@@ -1296,6 +1320,7 @@ function ns.DebugLines()
       s(ns.Rules.lastFoeFamily), s(ns.Rules.lastFoeType)),
     "  rules: " .. (ns.Rules.DebugState and ns.Rules:DebugState() or "?"),
     "  player: " .. (ns.Player.DebugState and ns.Player:DebugState() or "?"),
+    "  assign: " .. ns.DebugAssignments(),
   }
   local ok, mm = pcall(ns.Minimap.DebugInfo, ns.Minimap)
   table.insert(lines, "  minimap: " .. (ok and mm or ("error: " .. tostring(mm))))
@@ -1401,7 +1426,7 @@ local function printStatus()
   for _, s in ipairs(ns.SITUATIONS) do
     local assigned = ns.AssignedTo(s.key)
     print(("   %s%s|r -> %s"):format(active[s.key] and "|cff40ff40" or "|cff808080", ns.SituationLabel(s.key, true),
-      assigned and (ns.PlaylistLabel(assigned, true) .. (ns.IsPlayable(assigned) and "" or CL.EMPTY_SUFFIX)) or "-"))
+      assigned and (ns.PlaylistLabel(assigned, true) .. (ns.IsAssignable(assigned) and "" or CL.EMPTY_SUFFIX)) or "-"))
   end
   ns.Print("STATUS_COUNTS", #ns.tracks, #ns.PlaylistNames())
 end
