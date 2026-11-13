@@ -6,10 +6,16 @@ local B = {}
 ns.Banner = B
 
 local SHOW_TIME, FADE_TIME = 4, 0.4
-local f, lastTrack, hideTimer
+local f, lastTrack, hideTimer, moving, dragged
 
+-- db.ui.bannerPos = {point, relPoint, x, y} once the user has moved it; nil = above the chat
 local function anchor()
   f:ClearAllPoints()
+  local pos = ns.db.ui.bannerPos
+  if pos then
+    f:SetPoint(pos[1], UIParent, pos[2], pos[3], pos[4])
+    return
+  end
   local chat = _G.ChatFrame1 or _G.DEFAULT_CHAT_FRAME
   if chat and chat.IsShown and chat:IsShown() then
     f:SetPoint("BOTTOMLEFT", chat, "TOPLEFT", -4, 28) -- above the chat tabs
@@ -23,7 +29,26 @@ function B:Build()
   f = CreateFrame("Frame", "KalimdorZugZugRadioBanner", UIParent, "BackdropTemplate")
   f:SetSize(300, 52)
   f:SetFrameStrata("MEDIUM")
-  f:EnableMouse(false) -- never blocks clicks on the chat
+  f:EnableMouse(false) -- never blocks clicks on the chat (only while being moved)
+  f:SetMovable(true)
+  f:SetClampedToScreen(true)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) if moving then dragged = true self:StartMoving() end end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relPoint, x, y = self:GetPoint(1)
+    ns.db.ui.bannerPos = { point, relPoint, x, y }
+  end)
+  f:SetScript("OnMouseUp", function(_, button)
+    if not moving then return end
+    if button == "RightButton" then
+      ns.db.ui.bannerPos = nil
+      anchor()
+    elseif not dragged then
+      B:SetMoving(false) -- a plain click ends the move mode
+    end
+    dragged = false
+  end)
   f:Hide()
 
   f.cover = f:CreateTexture(nil, "ARTWORK")
@@ -70,12 +95,23 @@ function B:OnTrack(track)
   self:Show(track)
 end
 
+local function fill(track)
+  f.cover:SetTexture(track and ns.CoverOf(track) or ns.DEFAULT_COVER)
+  ns.SetText(f.title, track and track.title or "Kalimdor ZugZug Radio", "GameFontHighlight")
+  if moving then
+    f.artist:SetFontObject(ns.Font("GameFontDisableSmall"))
+    f.artist:SetText(L.BANNER_MOVE_HINT)
+    f.artist:SetTextColor(ns.ACCENT[1], ns.ACCENT[2], ns.ACCENT[3])
+  else
+    ns.SetText(f.artist, track and track.artist or "", "GameFontDisableSmall")
+  end
+end
+
 function B:Show(track)
   if not f then return end
+  fill(track)
+  if moving then return end -- stays put and visible until the move mode ends
   anchor()
-  f.cover:SetTexture(ns.CoverOf(track) or ns.DEFAULT_COVER)
-  ns.SetText(f.title, track.title or "?", "GameFontHighlight")
-  ns.SetText(f.artist, track.artist or "", "GameFontDisableSmall")
   f.fadeOut:Stop()
   if not f:IsShown() then
     f:SetAlpha(0)
@@ -89,6 +125,39 @@ function B:Show(track)
     hideTimer = nil
     f.fadeOut:Play()
   end)
+end
+
+-- Move mode: the banner stays visible and takes the mouse; drag it, right-click resets the
+-- position, a plain click ends the mode (so does /kzz banner or the Settings button again).
+function B:SetMoving(on)
+  if not f then return end
+  on = on and true or false
+  if on == (moving or false) then return end
+  moving = on
+  dragged = false
+  if hideTimer then hideTimer:Cancel() hideTimer = nil end
+  f.fadeIn:Stop()
+  f.fadeOut:Stop()
+  f:EnableMouse(on)
+  if on then
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    anchor()
+    fill(ns.Player.track)
+    f:SetAlpha(1)
+    f:Show()
+  else
+    fill(ns.Player.track)
+    f.fadeOut:Play()
+  end
+end
+
+function B:ToggleMoving()
+  self:SetMoving(not moving)
+end
+
+function B:IsMoving()
+  return moving and true or false
 end
 
 function B:IsShown()

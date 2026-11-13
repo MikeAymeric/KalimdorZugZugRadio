@@ -1021,5 +1021,18 @@ do
   check("missing track can be removed from a playlist", not left)
   ns.DeletePlaylist(name); ns.DeletePlaylist("Rock || Metal")
 end
+-- movable banner: move mode keeps it visible, the position is saved and can be reset
+do
+  ns.Banner:SetMoving(true)
+  check("banner move mode shows the banner", ns.Banner:IsMoving() and ns.Banner:IsShown())
+  advance(10)
+  check("banner stays visible while moving", ns.Banner:IsShown())
+  ns.db.ui.bannerPos = { "CENTER", "CENTER", 10, 20 }
+  ns.Banner:Show(ns.trackById["game:8158670"])
+  check("banner keeps showing in move mode on a new track", ns.Banner:IsMoving())
+  ns.Banner:ToggleMoving()
+  check("banner move mode ends", not ns.Banner:IsMoving())
+  ns.db.ui.bannerPos = nil
+end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

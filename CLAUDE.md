@@ -59,7 +59,7 @@ v0.5 additions:
 - **Conditions.** There are 16, in `ns.SITUATIONS` priority order. `levelup` is a one-track jingle: its end is scheduled on the `TRACK_CHANGED` of the jingle, with a 30s fallback. `fishing` uses channel events plus a 20s grace between casts. `mounted` = ground mount (not taxi, not `IsFlying`). `night` uses `GetGameTime`. `zone` = playlist per zone-level mapID: `ns.CurrentZone()`; micro maps inherit it, but city zones like Orgrimmar don't.
 - **Profiles.** `db.profiles[name] = {assign, disabled, zones}` and `db.charProfiles["Name-Realm"]`. `ns.db.assign/disabled/zones` are aliases of the active profile's tables; they are nil'ed on `PLAYER_LOGOUT` so they aren't saved twice. The pre-0.5 `db.assign` is migrated into `Default`.
 - **Crossfade.** `Player:SwitchTo` ramps the `Sound_MusicVolume` CVar. The original value is kept in `db.fadeVolume` and restored on load/logout if a fade was interrupted. Tests disable it globally and cover it in a dedicated scenario.
-- **Banner.lua.** A "Now playing" toast anchored above `ChatFrame1`.
+- **Banner.lua.** A "Now playing" toast anchored above `ChatFrame1`, or at `db.ui.bannerPos` once moved. It ignores the mouse except in move mode (`B:SetMoving`, Settings "Move banner" button, `/kzz banner`): it stays visible, drag moves it, right-click resets the position, a plain click ends the mode.
 - **Share.** `ns.ExportPlaylist`/`ImportPlaylist` = `"!KZZR1!" .. base64(name\nids...)`. `ns.ShowShareDialog`.
 - **Skins.** `ns.SkinWindow(frame, title, close)` gives any BackdropTemplate frame the classic or modern look. Player: `UI:ApplySkin`, setting `db.ui.skin`. Settings content lives in a `UIPanelScrollFrameTemplate`, with conditions in 2 columns.
 - **Performance.**

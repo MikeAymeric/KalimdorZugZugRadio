@@ -24,7 +24,7 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 - **Welcome guide**: sets everything up in a minute the first time you log in.
 - **Podcasts**: the latest episodes of your favourite podcasts, resumed where you left off.
 - **Player**: cover, title, remaining time, controls, volume, favourites, a compact mode and a classic WoW look.
-- **Comfort**: key bindings, minimap button, "Now playing" banner, pause when AFK, lower music during cinematics, per-character profiles.
+- **Comfort**: key bindings, minimap button, movable "Now playing" banner, pause when AFK, lower music during cinematics, per-character profiles.
 - **12 languages**: English, Français, Deutsch, Español (EU), Español (AL), Português (BR), Italiano, Русский, 简体中文, 繁體中文, 日本語, 한국어.
 
 ## Requirements
@@ -139,7 +139,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
 
 *Options > AddOns > Kalimdor ZugZug Radio*, or `/kzz config`, or Ctrl-click on the minimap button.
 
-- **General**: radio on/off, shuffle, classic style, fade between conditions, minimap button, lock the player, "Now playing" banner, pause when AFK, lower the music in cinematics and dialogues, compact player, **profile** and **language**, and the *Tutorial* button.
+- **General**: radio on/off, shuffle, classic style, fade between conditions, minimap button, lock the player, "Now playing" banner (the *Move banner* button lets you drag it anywhere), pause when AFK, lower the music in cinematics and dialogues, compact player, **profile** and **language**, and the *Tutorial* button.
 - **Smart shuffle** (on by default): tracks you skip early and the ones you just heard come up less often, tracks you have never heard more often. No track is ever left out.
 - **Music after a fight**: how long the fight music keeps playing, slowly fading out, before the next condition (4 to 10 seconds; 4 after a boss). If you start another fight meanwhile, the song goes on. Every new fight starts a different song.
 - **Zone music between tracks** (off by default): in calm conditions (no condition, zone, city, night, mounted) the game's own zone music plays every few tracks for a few minutes. Some areas have long silences or no zone music.
@@ -193,6 +193,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 | `/kzz stats` | Listening time and most played tracks |
 | `/kzz lang <code>` | Addon language (`auto`, `en`, `fr`, `de`, `es`, `pt`, `it`, `ru`, `zh`, `ja`...), then `/reload` |
 | `/kzz minimap`, `lock`, `reset` | Minimap button, lock or reset the player position |
+| `/kzz banner` | Move the "Now playing" banner (drag it; right-click resets it, click to finish) |
 | `/kzz perf`, `debug` | Performance and diagnostic information |
 
 ## Troubleshooting

@@ -1375,6 +1375,7 @@ SlashCmdList.KZZRADIO = function(msg)
     ns.Print(ns.db.ui.locked and "MSG_PLAYER_LOCKED" or "MSG_PLAYER_UNLOCKED")
   elseif cmd == "reset" then ns.UI:ResetPosition()
   elseif cmd == "minimap" then ns.Minimap:Toggle()
+  elseif cmd == "banner" then ns.Banner:ToggleMoving()
   elseif cmd == "lang" or cmd == "language" then languageCommand(rest)
   elseif cmd == "config" or cmd == "settings" or cmd == "options" then ns.Settings:Open()
   elseif cmd == "tutorial" or cmd == "guide" or cmd == "welcome" then ns.Onboarding:Show()
@@ -1397,6 +1398,6 @@ SlashCmdList.KZZRADIO = function(msg)
     for _, line in ipairs(ns.db.lastDebug) do print(line) end
     print("  (saved: /reload to write it to SavedVariables\\KalimdorZugZugRadio.lua)")
   else
-    for i = 1, 13 do ns.Print("HELP_" .. i) end
+    for i = 1, 14 do ns.Print("HELP_" .. i) end
   end
 end

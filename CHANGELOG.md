@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- **Movable "Now playing" banner**: the *Move banner* button in the settings (or `/kzz banner`) keeps the banner on screen so you can drag it anywhere. Right-click puts it back above the chat, a click finishes. Outside this mode it still never blocks clicks on the chat.
+
 ## 1.0.2
 
 - **No more replay at the end of a song**: when a track ended, about a second of its beginning played again before the next one. The game loops the music it plays, and the addon moved on just after the end; it now moves on a fraction of a second before.

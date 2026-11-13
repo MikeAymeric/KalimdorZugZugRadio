@@ -102,6 +102,8 @@ local function build(p)
     ns.db.zoneBreaks = on
     if not on then ns.Player:EndZoneBreak() ns.Rules:Evaluate(true) end
   end, nil, L.TT_ZONE_BREAKS)
+  p.moveBanner = ns.MakeButton(c, L.MOVE_BANNER, 150, function() ns.Banner:ToggleMoving() end, L.TT_MOVE_BANNER)
+  p.moveBanner:SetPoint("TOPLEFT", 20, -242)
   -- how often and how long: a few presets
   local BREAKS = { { 2, 1 }, { 3, 2 }, { 5, 3 }, { 8, 5 } }
   p.zoneBreakFreq = ns.MakeDropdown(c, 230, L.ZONE_BREAK_FREQ:format(3, 2), function(_, root)
