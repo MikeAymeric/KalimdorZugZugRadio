@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- **Music for each kind of enemy**: in the Combat and Elite conditions, *Specific enemies* gives a beast family (boar, wolf, wind serpent, spider...) or a creature type (beast, humanoid, undead, demon, elemental...) its own playlist. The first enemy you target in a fight decides it, and the song lasts the whole fight. A family wins over a type, and enemies without a playlist of their own use the normal combat music.
+- Enemies appear in the list once you target them, also out of combat, so you can set them up before the fight. *Assign here* in the player's menu offers the enemy of the current or last fight.
+- Open world only: in dungeons the game hides what kind of enemy you are fighting.
+- The names come from your game client: if you play the client in another language, the enemies are listed again in that language.
+
 ## 1.1.0
 
 - **Movable "Now playing" banner**: the *Move banner* button in the settings (or `/kzz banner`) keeps the banner on screen so you can drag it anywhere. Right-click puts it back above the chat, a click finishes. Outside this mode it still never blocks clicks on the chat.

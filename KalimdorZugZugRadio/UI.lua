@@ -132,6 +132,15 @@ local function hereTargets()
         get = function() return ns.db.zones[zone.id] and ns.db.zones[zone.id].playlist end,
         set = function(pl) ns.Assign("zone", pl) end }
     end
+    -- the enemy of the current (or last) fight, for the condition it was fought under
+    local cond = R.current == "elite" and "elite" or "combat"
+    for _, key in ipairs({ R.foeFamily or R.lastFoeFamily or false, R.foeType or R.lastFoeType or false }) do
+      if key and ns.FoeUsable(key) then
+        t[#t + 1] = { label = L.ASSIGN_FOE, name = ns.FoeName(key), general = true,
+          get = function() return ns.FoePlaylist(cond, key) end,
+          set = function(pl) ns.AssignFoe(cond, key, pl) end }
+      end
+    end
   end
   return t
 end

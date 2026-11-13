@@ -115,7 +115,7 @@ Spotify-exclusive podcasts have no RSS feed and can't be downloaded.
 - **Shuffle**, and the **volume** slider under the cover (it is the game's Music volume).
 - The **star** next to the title adds the track to your favourites.
 - The **dropdown** on the left chooses between *Automatic (conditions)* and a playlist to listen to freely. It also has:
-  - **Assign here**: give the playing playlist to the zone you are in, or to the current dungeon and its boss, with one click (or pick another playlist from its submenu);
+  - **Assign here**: give the playing playlist to the zone you are in, or to the current dungeon and its boss, or to the enemy you are fighting, with one click (or pick another playlist from its submenu);
   - **Up next**: the tracks you queued; click one to take it out, or clear the queue.
 - The **minimize** button turns the player into a small bar; the button on the bar brings it back.
 
@@ -149,9 +149,9 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
   |---|---|---|
   | 1 | Level up | One track (a jingle) when you level up, then the normal music comes back |
   | 2 | Boss | Dungeon and raid bosses. *Specific bosses* lets you give a boss its own playlist |
-  | 3 | Elite / Rare | Fighting an elite or rare enemy |
+  | 3 | Elite / Rare | Fighting an elite or rare enemy. *Specific enemies* works as in Combat |
   | 4 | Battleground / Arena | Inside a battleground or an arena |
-  | 5 | Combat | Any fight |
+  | 5 | Combat | Any fight. *Specific enemies* gives a beast family (boar, wolf, spider...) or a creature type (beast, undead, demon...) its own playlist, chosen by your target; open world only |
   | 6 | Dead / Ghost | While dead or as a ghost |
   | 7 | Flight | On a flight path |
   | 8 | Fishing | While fishing (and between casts) |

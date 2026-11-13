@@ -58,6 +58,8 @@ local APIS = {
   "C_UnitAuras.GetAuraDataByIndex", "C_UnitAuras.GetPlayerAuraBySpellID", "UnitAura", "AuraUtil.ForEachAura",
   -- Midnight restrictions
   "issecretvalue", "canaccessvalue",
+  -- creature family/type (per-species playlists)
+  "UnitCreatureFamily", "UnitCreatureType", "UnitGUID", "UnitThreatSituation", "UnitCanAttack",
   -- utilities / UI
   "C_Timer.After", "C_Timer.NewTicker", "GetTime", "MenuUtil.CreateContextMenu",
   "UIDropDownMenu_Initialize", "C_XMLUtil.GetTemplateInfo", "Settings.RegisterCanvasLayoutCategory",
@@ -94,9 +96,9 @@ local EVENTS = {
   "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED", "TAXIMAP_OPENED",
   "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
   "PLAYER_UPDATE_RESTING", "PLAYER_MOUNT_DISPLAY_CHANGED", "UNIT_AURA",
-  "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT",
+  "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "PLAYER_TARGET_CHANGED",
 }
-local QUIET = { UNIT_AURA = true, ZONE_CHANGED = true, ZONE_CHANGED_INDOORS = true }
+local QUIET = { UNIT_AURA = true, ZONE_CHANGED = true, ZONE_CHANGED_INDOORS = true, PLAYER_TARGET_CHANGED = true }
 
 local frame = CreateFrame("Frame")
 local counts, regFailed = {}, {}
@@ -154,6 +156,66 @@ local function combatSnapshot()
   probe("InCombatLockdown()", InCombatLockdown)
   probe("IsInInstance()", IsInInstance)
   scanAuras("combat-auras")
+end
+
+---------------------------------------------------------------------------
+-- 4b. Creature family/type of enemies (per-species playlists): are they readable in combat?
+---------------------------------------------------------------------------
+local MAX_CREATURES = 80
+
+local function call(fn, ...)
+  if not fn then return "n/a" end
+  local ok, v = pcall(fn, ...)
+  return ok and safe(v) or "<err>"
+end
+
+local function creatureSnapshot(unit, why)
+  local okE, exists = pcall(UnitExists, unit)
+  if not okE or safe(exists) ~= "true" then return end
+  local guid = call(UnitGUID, unit)
+  local npcID = "?"
+  if guid ~= "<SECRET>" and guid ~= "<err>" and guid ~= "n/a" and strsplit then
+    local okS, kind, _, _, _, _, id = pcall(strsplit, "-", guid)
+    if okS then npcID = tostring(kind) .. ":" .. tostring(id) end
+  end
+  local inInst = call(IsInInstance)
+  local row = {
+    t = date and date("%H:%M:%S") or "?",
+    why = why, unit = unit,
+    combat = call(InCombatLockdown), instance = inInst,
+    family = call(UnitCreatureFamily, unit),
+    ctype = call(UnitCreatureType, unit),
+    class = call(UnitClassification, unit),
+    name = call(UnitName, unit),
+    level = call(UnitLevel, unit),
+    guid = guid, npc = npcID,
+    attackable = call(UnitCanAttack, "player", unit),
+    unitCombat = call(UnitAffectingCombat, unit),
+    threat = call(UnitThreatSituation, "player", unit),
+  }
+  out("[creature] %s %s combat=%s inst=%s | family=%s type=%s class=%s | name=%s lvl=%s npc=%s | attackable=%s inCombat=%s threat=%s",
+    why, unit, row.combat, row.instance, row.family, row.ctype, row.class, row.name, row.level, row.npc,
+    row.attackable, row.unitCombat, row.threat)
+  if RadioProbeDB then
+    RadioProbeDB.creatures = RadioProbeDB.creatures or {}
+    local list = RadioProbeDB.creatures
+    list[#list + 1] = row
+    while #list > MAX_CREATURES do table.remove(list, 1) end
+  end
+end
+
+-- target plus the first few nameplates (can nameplates tell who is fighting us?)
+local function creatureScan(why)
+  creatureSnapshot("target", why)
+  local shown = 0
+  for i = 1, 40 do
+    if shown >= 6 then break end
+    local okE, exists = pcall(UnitExists, "nameplate" .. i)
+    if okE and safe(exists) == "true" then
+      shown = shown + 1
+      creatureSnapshot("nameplate" .. i, why)
+    end
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -282,10 +344,14 @@ frame:SetScript("OnEvent", function(_, ev, ...)
   if ev == "PLAYER_ENTERING_WORLD" and counts[ev] == 1 then
     reportApis()
     reportEvents()
-    out("Commands: /rprobe report | sound | music | stopmusic | tex | auras | clear")
+    out("Commands: /rprobe report | sound | music | stopmusic | tex | auras | creature | clear")
     if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(2, pollState) end
   elseif ev == "PLAYER_REGEN_DISABLED" then
     after(1, combatSnapshot)
+    after(1.5, function() creatureScan("pull+1s") end)
+    after(5, function() creatureScan("pull+5s") end)
+  elseif ev == "PLAYER_TARGET_CHANGED" then
+    creatureSnapshot("target", "target")
   elseif ev == "PLAYER_CONTROL_LOST" then
     after(1, function() out("After CONTROL_LOST: UnitOnTaxi=%s", UnitOnTaxi and UnitOnTaxi("player")) end)
   end
@@ -302,7 +368,8 @@ SlashCmdList.RADIOPROBE = function(msg)
   elseif cmd == "stopmusic" then pcall(StopMusic) out("StopMusic called")
   elseif cmd == "tex" then testTextures()
   elseif cmd == "auras" then scanAuras()
-  elseif cmd == "clear" then wipe(log) out("Log cleared")
+  elseif cmd == "creature" or cmd == "mob" then creatureScan("manual")
+  elseif cmd == "clear" then wipe(log) if RadioProbeDB then RadioProbeDB.creatures = {} end out("Log cleared")
   else reportApis() reportEvents()
   end
 end

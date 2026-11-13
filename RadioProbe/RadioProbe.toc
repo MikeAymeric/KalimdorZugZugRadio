@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Radio Probe
 ## Notes: Client compatibility probe for Kalimdor ZugZug Radio. /rprobe for commands.
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: RadioProbeDB
 
 RadioProbe.lua

@@ -35,8 +35,9 @@ local DEFAULTS = {
   smartPlaylists = {}, -- name -> { match = "all" | "any", rules = { { field, op, value }, ... } }
   upNext = {},     -- track ids queued with "Play next" / "Add to queue"
   -- per-character profiles: name -> { assign = {condition -> playlist}, disabled = {condition -> true},
-  -- zones = {mapID -> {playlist, name}}, bosses/dungeons = {id -> {playlist, name}}, volumes }.
-  -- ns.db.assign/disabled/zones/bosses/dungeons/volumes point to the active profile.
+  -- zones = {mapID -> {playlist, name}}, bosses/dungeons = {id -> {playlist, name}},
+  -- foes = {"<condition>|<foe key>" -> {playlist, name}} (see ns.FoeKeys), volumes }.
+  -- ns.db.assign/disabled/zones/bosses/dungeons/foes/volumes point to the active profile.
   profiles = {},
   charProfiles = {}, -- "Name-Realm" -> profile name
   crossfade = true,  -- fade the music volume when the condition changes
@@ -55,6 +56,7 @@ local DEFAULTS = {
   totalSeconds = 0,
   seenBosses = {},   -- encounterID -> boss name (to assign boss-specific music)
   seenDungeons = {}, -- instanceID -> dungeon name (to assign dungeon-specific music)
+  seenFoes = {},     -- foe key (ns.FoeKeys) -> creature family/type name, as last seen
   podcastProgress = {}, -- "ep:<key>" -> { part = n, done = true|nil, at = timestamp }
   lang = nil,      -- nil = client language
   ui = { shown = true, locked = false, skin = "classic", banner = true, compact = false }, -- skin: "classic" | "modern"
@@ -494,7 +496,7 @@ local function replaceAssignments(old, new)
         if v == old then prof.assign[key] = new end
       end
     end
-    for _, field in ipairs({ "zones", "bosses", "dungeons" }) do
+    for _, field in ipairs({ "zones", "bosses", "dungeons", "foes" }) do
       local map = prof[field]
       if type(map) == "table" then
         for id, e in pairs(map) do
@@ -817,6 +819,14 @@ function ns.PlaylistFor(key)
   local name
   if key == "zone" then
     name = ns.ZonePlaylist()
+  elseif ns.FOE_CONDITIONS[key] then
+    -- the enemy's family (beasts), then its creature type, then the generic playlist
+    local R = ns.Rules
+    for _, foe in ipairs({ R.foeFamily or false, R.foeType or false }) do
+      local e = foe and ns.db.foes[key .. "|" .. foe]
+      if e and ns.IsPlayable(e.playlist) then name = e.playlist break end
+    end
+    name = name or ns.db.assign[key]
   elseif key == "boss" or key == "dungeon" then
     -- a playlist for this specific boss / dungeon wins over the generic one
     local id = key == "boss" and ns.Rules.encounterID or (key == "dungeon" and ns.Rules.dungeonID)
@@ -838,6 +848,61 @@ end
 -- Boss-specific music: encounterID -> { playlist, name }.
 function ns.AssignBoss(id, playlist)
   ns.db.bosses[id] = playlist and { playlist = playlist, name = ns.db.seenBosses[id] } or nil
+  ns.Fire("PLAYLISTS_CHANGED")
+  ns.Rules:Evaluate(true)
+end
+
+-- Enemy-specific music (open world only: in instances these values are secret). A foe key is
+-- "family:<id>" / "type:<id>" when the client returns an id, otherwise the name tagged with the
+-- client language ("family:enUS:Wind Serpent"): names change with the language, so entries of
+-- another client language are kept but neither shown nor used (ns.FoeUsable).
+ns.FOE_CONDITIONS = { combat = true, elite = true }
+
+local function clientLocale()
+  return (GetLocale and GetLocale()) or "enUS"
+end
+
+local function readCreature(fn, unit)
+  if not fn then return nil end
+  local ok, name, id = pcall(fn, unit)
+  if not ok or ns.IsSecret(name) or type(name) ~= "string" or name == "" then return nil end
+  if ns.IsSecret(id) or type(id) ~= "number" or id <= 0 then id = nil end
+  return name, id
+end
+
+local function foeKey(kind, name, id)
+  if not name then return nil end
+  if id then return kind .. ":" .. id end
+  return kind .. ":" .. clientLocale() .. ":" .. name
+end
+
+-- Family key and type key of a unit (nil when unknown or secret); records the names seen.
+function ns.FoeKeys(unit)
+  local fName, fId = readCreature(UnitCreatureFamily, unit)
+  local tName, tId = readCreature(UnitCreatureType, unit)
+  local fKey, tKey = foeKey("family", fName, fId), foeKey("type", tName, tId)
+  if fKey then ns.db.seenFoes[fKey] = fName end
+  if tKey then ns.db.seenFoes[tKey] = tName end
+  return fKey, tKey
+end
+
+-- False for a name-based key recorded with another client language.
+function ns.FoeUsable(key)
+  local lang = key:match("^%a+:(%a%a%a%a):")
+  return not lang or lang == clientLocale()
+end
+
+function ns.FoeName(key)
+  return ns.db.seenFoes[key] or key:match("([^:]+)$") or key
+end
+
+function ns.FoePlaylist(cond, key)
+  local e = ns.db.foes[cond .. "|" .. key]
+  return e and e.playlist
+end
+
+function ns.AssignFoe(cond, key, playlist)
+  ns.db.foes[cond .. "|" .. key] = playlist and { playlist = playlist, name = ns.FoeName(key) } or nil
   ns.Fire("PLAYLISTS_CHANGED")
   ns.Rules:Evaluate(true)
 end
@@ -1013,7 +1078,7 @@ end
 ---------------------------------------------------------------------------
 ns.DEFAULT_PROFILE = "Default"
 -- The tables of a profile; ns.db.<field> points to the active profile's table.
-local PROFILE_FIELDS = { "assign", "disabled", "zones", "bosses", "dungeons", "volumes" }
+local PROFILE_FIELDS = { "assign", "disabled", "zones", "bosses", "dungeons", "foes", "volumes" }
 
 -- Deep copy of src's missing entries into dst (also used for the SavedVariables defaults).
 local function copyDefaults(dst, src)
@@ -1227,6 +1292,8 @@ function ns.DebugLines()
     ("  conditions: current %s, zone %s, dungeon %s (%s), encounter %s, last boss %s"):format(
       s(ns.Rules.current), s(ns.CurrentZone() and ns.CurrentZone().id), s(ns.Rules.dungeonID),
       s(ns.Rules.dungeonID and ns.db.seenDungeons[ns.Rules.dungeonID]), s(ns.Rules.encounterID), s(ns.Rules.lastBossID)),
+    ("  enemy: family %s, type %s (last fight: %s, %s)"):format(s(ns.Rules.foeFamily), s(ns.Rules.foeType),
+      s(ns.Rules.lastFoeFamily), s(ns.Rules.lastFoeType)),
     "  rules: " .. (ns.Rules.DebugState and ns.Rules:DebugState() or "?"),
     "  player: " .. (ns.Player.DebugState and ns.Player:DebugState() or "?"),
   }

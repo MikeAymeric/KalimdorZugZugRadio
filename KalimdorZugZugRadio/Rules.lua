@@ -66,6 +66,23 @@ local function checkElite()
   state.elite = true -- stays true until the end of combat
 end
 
+-- Enemy family/type for enemy-specific music: the first attackable target of a fight decides it,
+-- and the fight keeps it (and its song) until the end of the combat. Out of combat, targeting
+-- an enemy only records it, so it can be assigned before the fight.
+local function readFoe()
+  if ns.Safe(UnitCanAttack, "player", "target") ~= true then return nil end
+  return ns.FoeKeys("target")
+end
+
+local function checkFoe()
+  if R.foeFamily or R.foeType then return false end
+  local family, ctype = readFoe()
+  if not family and not ctype then return false end
+  R.foeFamily, R.foeType = family, ctype
+  R.lastFoeFamily, R.lastFoeType = family, ctype
+  return true
+end
+
 local function isFishingSpell(spellID)
   if type(spellID) ~= "number" then return false end
   if FISHING_SPELLS[spellID] then return true end
@@ -311,15 +328,20 @@ function R:Start()
     state.campfire = false
     if not state.encounter and not state.bossTail then state.shortTail = false end
     checkElite()
+    checkFoe()
   end)
   on("PLAYER_REGEN_ENABLED", function()
     state.combat = false
     state.elite = false
     state.bossTail = false
+    R.foeFamily, R.foeType = nil, nil
     updateCampfire()
   end)
   on("PLAYER_TARGET_CHANGED", function()
-    if state.combat then checkElite() end
+    if not state.combat then readFoe() return false end
+    local before = state.elite
+    checkElite()
+    if not checkFoe() and state.elite == before then return false end
   end)
   -- auras are unreadable in combat anyway: ignore UNIT_AURA there (it fires constantly)
   on("UNIT_AURA", function(unit)

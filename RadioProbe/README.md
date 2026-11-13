@@ -23,6 +23,7 @@ On login it prints the build, missing APIs and events in chat. Then:
 | Boss | enter a dungeon and pull a boss | Does `ENCOUNTER_START` fire? (instance bosses only, not rares/elites) |
 | Flight | take a flight path | Does `State taxi: false -> true` appear? |
 | Campfire | light a campfire, sit down, `/rprobe auras` | Name and spellId of the fire's aura |
+| Enemy species | target a boar or wolf out of combat, attack it; repeat in a dungeon | `[creature]` lines: are `family`/`type`/`npc` readable or `<SECRET>` with `combat=true`? Also `/rprobe creature` |
 | Summary | `/rprobe report` | Count of events received |
 
 ## Sending the results

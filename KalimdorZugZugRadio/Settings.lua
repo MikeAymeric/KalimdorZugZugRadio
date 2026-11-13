@@ -60,6 +60,37 @@ local function specificMenu(root, title, emptyLabel, seen, assigned, assign)
   end
 end
 
+-- "Specific enemies" of the combat/elite conditions: beast families and creature types met in
+-- the open world (only those of the current client language when names had to be used).
+local function foeMenu(root, cond)
+  local menu = root:CreateButton(L.FOE_SPECIFIC)
+  ns.StyleMenuItem(menu)
+  ns.StyleMenuItem(menu:CreateTitle(L.FOE_HINT))
+  local groups = { family = {}, type = {} }
+  for key in pairs(ns.db.seenFoes) do
+    local kind = key:match("^(%a+):")
+    if groups[kind] and ns.FoeUsable(key) then table.insert(groups[kind], key) end
+  end
+  local any = false
+  for _, g in ipairs({ { "family", L.FOE_FAMILIES }, { "type", L.FOE_TYPES } }) do
+    local keys = groups[g[1]]
+    if #keys > 0 then
+      any = true
+      table.sort(keys, function(a, b) return ns.FoeName(a) < ns.FoeName(b) end)
+      menu:CreateDivider()
+      ns.StyleMenuItem(menu:CreateTitle(g[2]))
+      for _, key in ipairs(keys) do
+        local name, pl = ns.FoeName(key), ns.FoePlaylist(cond, key)
+        local entry = menu:CreateButton(name .. (pl and ("  -  " .. ns.PlaylistLabel(pl)) or ""))
+        ns.StyleMenuItem(entry, ns.TextFont(name))
+        ns.PlaylistMenu(entry, function(n) return ns.FoePlaylist(cond, key) == n end,
+          function(n) ns.AssignFoe(cond, key, n) end, L.ASSIGN_GENERAL)
+      end
+    end
+  end
+  if not any then ns.StyleMenuItem(menu:CreateTitle(L.FOE_NONE_SEEN)) end
+end
+
 local function build(p)
   local c = p
   local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, p, "UIPanelScrollFrameTemplate")
@@ -211,6 +242,8 @@ local function build(p)
         specificMenu(root, L.BOSS_SPECIFIC, L.BOSS_NONE_SEEN, ns.db.seenBosses, ns.db.bosses, ns.AssignBoss)
       elseif s.key == "dungeon" then
         specificMenu(root, L.DUNGEON_SPECIFIC, L.DUNGEON_NONE_SEEN, ns.db.seenDungeons, ns.db.dungeons, ns.AssignDungeon)
+      elseif ns.FOE_CONDITIONS[s.key] then
+        foeMenu(root, s.key)
       end
     end)
     if row.dropdown then row.dropdown:SetPoint("TOPLEFT", x + 150, y + 2) end

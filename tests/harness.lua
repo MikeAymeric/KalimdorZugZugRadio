@@ -97,6 +97,8 @@ function GetInstanceInfo() return G.instanceName, G.instance, 1, "Normal", 5, 0,
 function GetUnitSpeed() return G.speed end
 function UnitClassification() return G.class end
 function UnitCanAttack() return true end
+function UnitCreatureFamily() return G.family, G.familyId end
+function UnitCreatureType() return G.ctype, G.ctypeId end
 function issecretvalue() return false end
 C_UnitAuras = { GetPlayerAuraBySpellID = function(id)
   if G.combat then error("Auras cannot be accessed when secret") end
@@ -1033,6 +1035,51 @@ do
   ns.Banner:ToggleMoving()
   check("banner move mode ends", not ns.Banner:IsMoving())
   ns.db.ui.bannerPos = nil
+end
+-- enemy-specific music: family, then type, then the generic combat playlist
+do
+  ns.SetMode("auto"); G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(10)
+  ns.CreatePlaylist("Boars"); ns.SetInPlaylist("Boars", "music\\a.ogg", true)
+  ns.CreatePlaylist("Beasts"); ns.SetInPlaylist("Beasts", "music\\b.ogg", true)
+  ns.Assign("combat", "Fight")
+  G.family, G.ctype = "Boar", "Beast"
+  fire("PLAYER_TARGET_CHANGED"); advance(1)
+  check("targeting an enemy out of combat records it",
+    ns.db.seenFoes["family:enUS:Boar"] == "Boar" and ns.db.seenFoes["type:enUS:Beast"] == "Beast")
+  ns.AssignFoe("combat", "family:enUS:Boar", "Boars")
+  ns.AssignFoe("combat", "type:enUS:Beast", "Beasts")
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("a boar fight plays the boar playlist", ns.Player.playlist == "Boars")
+  G.family, G.ctype = nil, "Humanoid"
+  fire("PLAYER_TARGET_CHANGED"); advance(1)
+  check("the first enemy decides the fight's playlist", ns.Player.playlist == "Boars")
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+  G.family, G.ctype = "Wolf", "Beast"
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("a beast without its own family uses the type playlist", ns.Player.playlist == "Beasts")
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+  G.family, G.ctype = nil, "Humanoid"
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("other enemies use the generic combat playlist", ns.Player.playlist == "Fight")
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+  -- another client language: name-based entries are kept but not used
+  clientLocale = "deDE"
+  check("entries of another client language are hidden", not ns.FoeUsable("family:enUS:Boar")
+    and ns.FoeUsable("family:7") and ns.FoeUsable("family:deDE:Eber"))
+  G.family, G.ctype = "Boar", "Beast"
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+  check("another client language doesn't match enUS names", ns.Player.playlist == "Fight")
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(15)
+  clientLocale = "enUS"
+  -- ids, when the client returns them, don't depend on the language
+  G.family, G.familyId, G.ctype, G.ctypeId = "Boar", 5, "Beast", 1
+  fire("PLAYER_TARGET_CHANGED")
+  check("ids make language-independent keys", ns.db.seenFoes["family:5"] == "Boar" and ns.db.seenFoes["type:1"] == "Beast")
+  ns.RenamePlaylist("Boars", "Boars 2")
+  check("renaming a playlist updates enemy assignments", ns.FoePlaylist("combat", "family:enUS:Boar") == "Boars 2")
+  ns.DeletePlaylist("Boars 2"); ns.DeletePlaylist("Beasts")
+  check("deleting a playlist removes enemy assignments", ns.FoePlaylist("combat", "type:enUS:Beast") == nil)
+  G.family, G.familyId, G.ctype, G.ctypeId = nil, nil, nil, nil
 end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))
