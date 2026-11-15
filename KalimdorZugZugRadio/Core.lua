@@ -266,7 +266,8 @@ function ns.LoadLibrary()
       local ep = episodes[t.episode]
       if not ep then
         ep = { file = "ep:" .. t.episode, episode = t.episode, podcast = true, title = t.title or "?",
-               artist = t.artist, album = t.album, folder = t.folder, cover = t.cover, parts = {}, duration = 0 }
+               artist = t.artist, album = t.album, folder = t.folder, cover = t.cover, parts = {}, duration = 0,
+               serial = t.serial == true }
         episodes[t.episode] = ep
       end
       table.insert(ep.parts, { file = t.file, duration = tonumber(t.duration) or 0, index = t.part or #ep.parts + 1 })
@@ -281,8 +282,24 @@ function ns.LoadLibrary()
     -- podcasts have their own category: not part of "Whole library" (ns.tracks)
     indexTrack(ep, ns.episodes, ns.episodeById)
   end
+  -- Newest first (album = date). A podcast listened in order from a chosen episode ("serial", set by
+  -- the import) stays together, oldest first, placed by its newest downloaded episode.
+  local showLatest = {}
+  for _, ep in ipairs(ns.episodes) do
+    local show, date = ep.artist or "", ep.album or ""
+    if ep.serial and date > (showLatest[show] or "") then showLatest[show] = date end
+  end
+  local function sortDate(ep) return ep.serial and showLatest[ep.artist or ""] or ep.album or "" end
+  local function group(ep) return ep.serial and ("1" .. (ep.artist or "")) or "0" end
   table.sort(ns.episodes, function(a, b)
-    if (a.album or "") ~= (b.album or "") then return (a.album or "") > (b.album or "") end -- date, newest first
+    local da, db = sortDate(a), sortDate(b)
+    if da ~= db then return da > db end
+    local ga, gb = group(a), group(b)
+    if ga ~= gb then return ga < gb end
+    if (a.album or "") ~= (b.album or "") then
+      if a.serial then return (a.album or "") < (b.album or "") end -- in order: oldest first
+      return (a.album or "") > (b.album or "")
+    end
     return a.title < b.title
   end)
   for _, g in ipairs(KZZR_GameMusic or {}) do

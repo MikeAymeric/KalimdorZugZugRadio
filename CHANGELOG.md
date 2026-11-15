@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0
+
+Adding your own music no longer needs a terminal.
+
+- **Import music.py opens a window**: add files or whole folders with the usual Windows dialogs, tick the options, press *Import* and follow the progress bar. No numbered menu, no paths to type, and your choices are remembered. The window speaks the language you chose in the addon (or the game's, or Windows'), in all 12 languages of the addon. The text menu is still there with `--menu`, and the command line options work as before.
+- **No more ffmpeg to install by hand**: if it is missing, Import music.py offers to download it (about 110 MB, the same builds winget installs, from GitHub, checked against their checksum) into `%LOCALAPPDATA%\KalimdorZugZugRadio\ffmpeg`. Nothing else on the PC is changed; delete that folder to remove it. On macOS and Linux it explains how to install it.
+- **Podcasts in the window**: add a podcast by pasting its link (RSS or Apple Podcasts), checked at once and shown by name; change it or remove it with a click. The list is still saved in `podcasts.txt`.
+- **Podcasts in order, from the episode you choose**: choose *Listen in order* and pick the first episode from the feed's list. The import downloads it and the next ones; at every import the episodes you finished in game are deleted and the following ones downloaded, so you can go through a whole series. In the Podcasts playlist these episodes stay together, oldest first.
+- **Faster imports**: what was read from each track (tags, duration, cover, the genre of the original in your music library) is remembered, so the next imports only read new or changed files. A library of 2000 tracks no longer takes minutes when nothing changed.
+- **Faster podcast downloads, with progress**: the next episode downloads while the previous ones convert, and up to 3 episodes convert at the same time on processors with several cores (three episodes took about half the time in our tests). The window shows the megabytes downloaded and how far each conversion is, instead of looking stuck.
+- The window reminds you that converting a large library or podcasts can take a while and is best done before starting the game.
+- Import music.py says clearly when Python is too old, and asks to report unexpected errors instead of only showing them.
+
 ## 1.3.0
 
 - **Game zone music as a choice**: every condition (and every zone, boss, dungeon or enemy) can be set to *Game zone music*. The game's own soundtrack then plays there, and the addon only takes over where you gave a playlist, for example combat, swimming or dungeons. Unlike *None*, it doesn't fall back to a lower condition: a city set to *Game zone music* plays the city's music even if *No condition* has a playlist.

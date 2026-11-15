@@ -1,0 +1,1246 @@
+"""Texts of the import window (import_gui.py) in the addon's 12 languages.
+
+enUS is the reference: every other language must have the same keys and the same {placeholders}
+(tests/check_import_strings.py checks it). The language is the one chosen in the addon in game
+(KZZR_DB.lang in the SavedVariables), else the game client's (textLocale in Config.wtf), else
+Windows', else English. The detailed log of the import stays in English.
+"""
+from __future__ import annotations
+
+import glob
+import locale
+import os
+import re
+import sys
+from pathlib import Path
+
+STRINGS: dict[str, dict[str, str]] = {}
+
+STRINGS["enUS"] = {
+    "title": "Kalimdor ZugZug Radio - Import music",
+    "heading": "Add your own music to Kalimdor ZugZug Radio",
+    "steps": "1. Add your music.   2. Press Import.   3. Restart the game.",
+    "music_frame": "Your music",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Whole folders (for example one per album) are fine.",
+    "music_count": "Tracks in your music folder: {tracks}",
+    "music_count_convert": "Tracks in your music folder: {tracks} (to convert: {convert})",
+    "add_files": "Add files...",
+    "add_folder": "Add a folder...",
+    "open_music": "Open the music folder",
+    "library_frame": "Optional: keep in sync with your music library",
+    "library_hint": "If your music is in a folder you keep adding to (iTunes, Plex, Music...), choose it: every time "
+                    "you import, the tracks the addon doesn't have yet are copied. That folder is only read, never "
+                    "changed.",
+    "not_set": "Not set",
+    "choose": "Choose...",
+    "remove": "Remove",
+    "options_frame": "Options",
+    "opt_rename": "Rename files with non-Latin names (recommended: the game may not play them)",
+    "opt_keep": "Keep the original files after converting them (otherwise they are deleted: they are copies)",
+    "covers_from": "Recover missing covers from:",
+    "covers_library": "your music library",
+    "podcasts_frame": "Podcasts",
+    "podcasts_hint": "The latest episodes of your podcasts are downloaded at every import; in game they resume "
+                     "where you left off.",
+    "podcasts_download": "Download new episodes when importing",
+    "col_podcast": "Podcast",
+    "col_keep": "Episodes",
+    "podcast_add": "Add...",
+    "podcast_edit": "Edit...",
+    "podcast_edit_title": "Podcast settings",
+    "podcast_mode_latest": "Keep the latest episodes",
+    "podcast_mode_order": "Listen in order, from an episode I choose",
+    "podcast_pick_title": "Where to start",
+    "podcast_pick_prompt": "Choose the first episode to listen to. The next ones follow in order: at every import, the episodes you finished are deleted and the following ones downloaded. Import with the game closed, so the addon's progress is saved.",
+    "col_from": "From",
+    "from_latest": "latest",
+    "podcast_add_title": "Add a podcast",
+    "podcast_add_prompt": "Paste the address of the podcast: its RSS feed or its Apple Podcasts page.",
+    "podcast_keep_label": "Episodes to keep:",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "podcast_checking": "Checking the podcast...",
+    "podcast_added": "Podcast added: {name}",
+    "podcast_bad": "This podcast could not be read:\n{error}\n\nCheck the address and try again.",
+    "podcast_dup": "This podcast is already in the list.",
+    "podcast_remove_ask": "Remove {name} from the list?",
+    "podcast_delete_ask": "Also delete the episodes of {name} already downloaded?",
+    "import_note": "Converting a large library or downloading and converting podcasts can take a while, especially the first time. Do it before starting the game: new music is only seen after a restart, and the game saves which podcast episodes you finished when you log out.",
+    "import": "Import",
+    "download_ffmpeg": "Download ffmpeg",
+    "status_looking": "Looking for the addon...",
+    "status_preparing": "Preparing your music folder...",
+    "status_ready": "Ready.",
+    "status_no_ffmpeg": "ffmpeg is missing: press \"Download ffmpeg\".",
+    "status_copying": "Copying...",
+    "status_importing": "Importing...",
+    "status_importing_folder": "Importing {folder}...",
+    "status_writing": "Writing the library...",
+    "status_podcast_download": "{show} – {episode}: downloading {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: downloading {done} MB",
+    "status_podcast_convert": "{show} – {episode}: converting {percent}%",
+    "status_stopped": "Stopped.",
+    "status_added": "Files added: {count}",
+    "status_nothing_new": "Nothing new to add.",
+    "status_done": "Done. Tracks in your library: {tracks}",
+    "error_generic": "Something went wrong. Nothing you did caused it: please report it at\n{url}\nand include "
+                     "the text of the window (select it, then Ctrl+C).",
+    "error_stopped": "The import stopped. The reason is in the window.",
+    "close_running": "The import is not finished yet. Close anyway?\nYou can run it again later.",
+    "addon_not_found": "The {addon} addon was not found automatically.\n\nChoose its folder:\n{path}",
+    "addon_folder_title": "Folder of the {addon} addon",
+    "ffmpeg_ask": "This needs ffmpeg, a free program that converts your music and reads its titles and covers. "
+                  "It is not on this PC yet.\n\nDownload it now? (about 110 MB, from github.com/GyanD/codexffmpeg)"
+                  "\n\nIt goes into {folder}\nNothing else on your PC is changed: to remove it, delete that folder.",
+    "ffmpeg_other_os": "This needs ffmpeg, a free program that converts music.\n\nmacOS: install Homebrew "
+                       "(brew.sh), then run  brew install ffmpeg\nLinux: install the ffmpeg package "
+                       "(sudo apt install ffmpeg)",
+    "ffmpeg_downloading": "Downloading ffmpeg: {done} / {total} MB",
+    "ffmpeg_failed": "ffmpeg could not be downloaded (the reason is in the window).\n\nCheck your internet "
+                     "connection and press \"Download ffmpeg\" to try again, or install it yourself: open the "
+                     "Start menu, type cmd, open \"Command Prompt\" and run\n    winget install Gyan.FFmpeg",
+    "filetype_music": "Music files",
+    "filetype_all": "All files",
+    "add_files_title": "Choose music files to add",
+    "add_folder_title": "Choose a folder of music to add",
+    "bad_folder": "Choose a folder with music, outside the addon's music folder (and not a whole drive).",
+    "files_added_ask": "Files added to your music folder: {count}\n\nImport them now?",
+    "already_there": "These tracks are already in your music folder.",
+    "library_title": "Choose your music library",
+    "library_is_addon": "That is the addon's own music folder: choose the folder where you keep your music.",
+    "covers_title": "Folder with the original files (same folders and names as in the music folder)",
+    "copy_confirm": "New tracks in your music library: {count}\n\nCopy them into the addon and import them? "
+                    "The list is in the window.",
+    "done": "Done! Tracks in your library: {tracks}",
+    "done_converted": "Converted: {count}",
+    "done_copied": "Copied from your music library: {count}",
+    "done_warnings": "Warnings: {count} (see the window).",
+    "done_restart": "Restart the game completely to hear new tracks (/reload is not enough).\nIn game, /kzz lib "
+                    "opens the library, where you make your playlists.",
+    "crash": "Something went wrong:\n\n{text}\n\nPlease report it at {url}",
+}
+
+STRINGS["frFR"] = {
+    "title": "Kalimdor ZugZug Radio - Importer la musique",
+    "heading": "Ajoutez votre musique à Kalimdor ZugZug Radio",
+    "steps": "1. Ajoutez votre musique.   2. Cliquez sur Importer.   3. Redémarrez le jeu.",
+    "music_frame": "Votre musique",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Les dossiers entiers (par exemple un par album) conviennent aussi.",
+    "music_count": "Morceaux dans votre dossier de musique : {tracks}",
+    "music_count_convert": "Morceaux dans votre dossier de musique : {tracks} (à convertir : {convert})",
+    "add_files": "Ajouter des fichiers...",
+    "add_folder": "Ajouter un dossier...",
+    "open_music": "Ouvrir le dossier de musique",
+    "library_frame": "Facultatif : synchroniser avec votre bibliothèque musicale",
+    "library_hint": "Si votre musique est dans un dossier que vous enrichissez (iTunes, Plex, Musique...), "
+                    "choisissez-le : à chaque importation, les morceaux que l'addon n'a pas encore sont copiés. "
+                    "Ce dossier est seulement lu, jamais modifié.",
+    "not_set": "Non défini",
+    "choose": "Choisir...",
+    "remove": "Retirer",
+    "options_frame": "Options",
+    "opt_rename": "Renommer les fichiers aux noms non latins (recommandé : le jeu peut ne pas les lire)",
+    "opt_keep": "Garder les fichiers originaux après conversion (sinon ils sont supprimés : ce sont des copies)",
+    "covers_from": "Récupérer les pochettes manquantes depuis :",
+    "covers_library": "votre bibliothèque musicale",
+    "podcasts_frame": "Podcasts",
+    "podcasts_hint": "Les derniers épisodes de vos podcasts sont téléchargés à chaque importation ; en jeu, ils "
+                     "reprennent là où vous vous êtes arrêté.",
+    "podcasts_download": "Télécharger les nouveaux épisodes à l'importation",
+    "col_podcast": "Podcast",
+    "col_keep": "Épisodes",
+    "podcast_add": "Ajouter...",
+    "podcast_edit": "Modifier...",
+    "podcast_edit_title": "Réglages du podcast",
+    "podcast_mode_latest": "Garder les derniers épisodes",
+    "podcast_mode_order": "Écouter dans l'ordre, à partir d'un épisode de mon choix",
+    "podcast_pick_title": "Par où commencer",
+    "podcast_pick_prompt": "Choisissez le premier épisode à écouter. Les suivants viennent dans l'ordre : à chaque importation, les épisodes terminés sont supprimés et les suivants téléchargés. Importez avec le jeu fermé, pour que la progression de l'addon soit enregistrée.",
+    "col_from": "Depuis",
+    "from_latest": "derniers",
+    "podcast_add_title": "Ajouter un podcast",
+    "podcast_add_prompt": "Collez l'adresse du podcast : son flux RSS ou sa page Apple Podcasts.",
+    "podcast_keep_label": "Épisodes à garder :",
+    "ok": "OK",
+    "cancel": "Annuler",
+    "podcast_checking": "Vérification du podcast...",
+    "podcast_added": "Podcast ajouté : {name}",
+    "podcast_bad": "Impossible de lire ce podcast :\n{error}\n\nVérifiez l'adresse et réessayez.",
+    "podcast_dup": "Ce podcast est déjà dans la liste.",
+    "podcast_remove_ask": "Retirer {name} de la liste ?",
+    "podcast_delete_ask": "Supprimer aussi les épisodes de {name} déjà téléchargés ?",
+    "import_note": "Convertir une grande bibliothèque ou télécharger et convertir des podcasts peut prendre du temps, surtout la première fois. Faites-le avant de lancer le jeu : la nouvelle musique n'apparaît qu'après un redémarrage, et le jeu enregistre les épisodes terminés quand vous vous déconnectez.",
+    "import": "Importer",
+    "download_ffmpeg": "Télécharger ffmpeg",
+    "status_looking": "Recherche de l'addon...",
+    "status_preparing": "Préparation de votre dossier de musique...",
+    "status_ready": "Prêt.",
+    "status_no_ffmpeg": "ffmpeg manque : cliquez sur « Télécharger ffmpeg ».",
+    "status_copying": "Copie...",
+    "status_importing": "Importation...",
+    "status_importing_folder": "Importation de {folder}...",
+    "status_writing": "Écriture de la bibliothèque...",
+    "status_podcast_download": "{show} – {episode} : téléchargement {done} / {total} Mo",
+    "status_podcast_download_nosize": "{show} – {episode} : téléchargement {done} Mo",
+    "status_podcast_convert": "{show} – {episode} : conversion {percent} %",
+    "status_stopped": "Arrêté.",
+    "status_added": "Fichiers ajoutés : {count}",
+    "status_nothing_new": "Rien de nouveau à ajouter.",
+    "status_done": "Terminé. Morceaux dans votre bibliothèque : {tracks}",
+    "error_generic": "Un problème est survenu. Vous n'y êtes pour rien : merci de le signaler sur\n{url}\nen "
+                     "joignant le texte de la fenêtre (sélectionnez-le, puis Ctrl+C).",
+    "error_stopped": "L'importation s'est arrêtée. La raison est indiquée dans la fenêtre.",
+    "close_running": "L'importation n'est pas terminée. Fermer quand même ?\nVous pourrez la relancer plus tard.",
+    "addon_not_found": "L'addon {addon} n'a pas été trouvé automatiquement.\n\nChoisissez son dossier :\n{path}",
+    "addon_folder_title": "Dossier de l'addon {addon}",
+    "ffmpeg_ask": "Il faut ffmpeg, un programme gratuit qui convertit votre musique et lit ses titres et ses "
+                  "pochettes. Il n'est pas encore sur ce PC.\n\nLe télécharger maintenant ? (environ 110 Mo, depuis "
+                  "github.com/GyanD/codexffmpeg)\n\nIl sera placé dans {folder}\nRien d'autre n'est modifié sur "
+                  "votre PC : pour le retirer, supprimez ce dossier.",
+    "ffmpeg_other_os": "Il faut ffmpeg, un programme gratuit qui convertit la musique.\n\nmacOS : installez "
+                       "Homebrew (brew.sh), puis lancez  brew install ffmpeg\nLinux : installez le paquet ffmpeg "
+                       "(sudo apt install ffmpeg)",
+    "ffmpeg_downloading": "Téléchargement de ffmpeg : {done} / {total} Mo",
+    "ffmpeg_failed": "ffmpeg n'a pas pu être téléchargé (la raison est dans la fenêtre).\n\nVérifiez votre "
+                     "connexion et cliquez sur « Télécharger ffmpeg » pour réessayer, ou installez-le vous-même : "
+                     "ouvrez le menu Démarrer, tapez cmd, ouvrez « Invite de commandes » et lancez\n    winget "
+                     "install Gyan.FFmpeg",
+    "filetype_music": "Fichiers audio",
+    "filetype_all": "Tous les fichiers",
+    "add_files_title": "Choisissez les fichiers audio à ajouter",
+    "add_folder_title": "Choisissez un dossier de musique à ajouter",
+    "bad_folder": "Choisissez un dossier de musique, en dehors du dossier de musique de l'addon (et pas un disque "
+                  "entier).",
+    "files_added_ask": "Fichiers ajoutés à votre dossier de musique : {count}\n\nLes importer maintenant ?",
+    "already_there": "Ces morceaux sont déjà dans votre dossier de musique.",
+    "library_title": "Choisissez votre bibliothèque musicale",
+    "library_is_addon": "C'est le dossier de musique de l'addon : choisissez le dossier où vous gardez votre "
+                        "musique.",
+    "covers_title": "Dossier des fichiers originaux (mêmes dossiers et noms que dans le dossier de musique)",
+    "copy_confirm": "Nouveaux morceaux dans votre bibliothèque musicale : {count}\n\nLes copier dans l'addon et "
+                    "les importer ? La liste est dans la fenêtre.",
+    "done": "Terminé ! Morceaux dans votre bibliothèque : {tracks}",
+    "done_converted": "Convertis : {count}",
+    "done_copied": "Copiés depuis votre bibliothèque musicale : {count}",
+    "done_warnings": "Avertissements : {count} (voir la fenêtre).",
+    "done_restart": "Redémarrez complètement le jeu pour entendre les nouveaux morceaux (/reload ne suffit pas)."
+                    "\nEn jeu, /kzz lib ouvre la bibliothèque, où vous créez vos playlists.",
+    "crash": "Un problème est survenu :\n\n{text}\n\nMerci de le signaler sur {url}",
+}
+
+STRINGS["deDE"] = {
+    "title": "Kalimdor ZugZug Radio - Musik importieren",
+    "heading": "Füge Kalimdor ZugZug Radio deine eigene Musik hinzu",
+    "steps": "1. Füge deine Musik hinzu.   2. Klicke auf Importieren.   3. Starte das Spiel neu.",
+    "music_frame": "Deine Musik",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Ganze Ordner (zum Beispiel einer pro Album) gehen auch.",
+    "music_count": "Titel in deinem Musikordner: {tracks}",
+    "music_count_convert": "Titel in deinem Musikordner: {tracks} (umzuwandeln: {convert})",
+    "add_files": "Dateien hinzufügen...",
+    "add_folder": "Ordner hinzufügen...",
+    "open_music": "Musikordner öffnen",
+    "library_frame": "Optional: mit deiner Musiksammlung abgleichen",
+    "library_hint": "Liegt deine Musik in einem Ordner, den du ständig erweiterst (iTunes, Plex, Musik...), wähle "
+                    "ihn aus: Bei jedem Import werden die Titel kopiert, die das Addon noch nicht hat. Dieser "
+                    "Ordner wird nur gelesen, nie verändert.",
+    "not_set": "Nicht festgelegt",
+    "choose": "Auswählen...",
+    "remove": "Entfernen",
+    "options_frame": "Optionen",
+    "opt_rename": "Dateien mit nicht-lateinischen Namen umbenennen (empfohlen: das Spiel spielt sie evtl. nicht ab)",
+    "opt_keep": "Originaldateien nach dem Umwandeln behalten (sonst werden sie gelöscht: es sind Kopien)",
+    "covers_from": "Fehlende Cover wiederherstellen aus:",
+    "covers_library": "deiner Musiksammlung",
+    "podcasts_frame": "Podcasts",
+    "podcasts_hint": "Die neuesten Folgen deiner Podcasts werden bei jedem Import geladen; im Spiel geht es dort "
+                     "weiter, wo du aufgehört hast.",
+    "podcasts_download": "Neue Folgen beim Import herunterladen",
+    "col_podcast": "Podcast",
+    "col_keep": "Folgen",
+    "podcast_add": "Hinzufügen...",
+    "podcast_edit": "Bearbeiten...",
+    "podcast_edit_title": "Podcast-Einstellungen",
+    "podcast_mode_latest": "Die neuesten Folgen behalten",
+    "podcast_mode_order": "Der Reihe nach hören, ab einer Folge meiner Wahl",
+    "podcast_pick_title": "Wo beginnen",
+    "podcast_pick_prompt": "Wähle die erste Folge, die du hören willst. Die nächsten folgen der Reihe nach: Bei jedem Import werden fertig gehörte Folgen gelöscht und die nächsten heruntergeladen. Importiere bei geschlossenem Spiel, damit der Fortschritt des Addons gespeichert ist.",
+    "col_from": "Ab",
+    "from_latest": "neueste",
+    "podcast_add_title": "Podcast hinzufügen",
+    "podcast_add_prompt": "Füge die Adresse des Podcasts ein: seinen RSS-Feed oder seine Apple-Podcasts-Seite.",
+    "podcast_keep_label": "Zu behaltende Folgen:",
+    "ok": "OK",
+    "cancel": "Abbrechen",
+    "podcast_checking": "Podcast wird geprüft...",
+    "podcast_added": "Podcast hinzugefügt: {name}",
+    "podcast_bad": "Dieser Podcast konnte nicht gelesen werden:\n{error}\n\nPrüfe die Adresse und versuche es "
+                   "erneut.",
+    "podcast_dup": "Dieser Podcast ist schon in der Liste.",
+    "podcast_remove_ask": "{name} aus der Liste entfernen?",
+    "podcast_delete_ask": "Auch die schon heruntergeladenen Folgen von {name} löschen?",
+    "import_note": "Eine große Musiksammlung umzuwandeln oder Podcasts herunterzuladen und umzuwandeln kann dauern, vor allem beim ersten Mal. Mach es, bevor du das Spiel startest: neue Musik erscheint erst nach einem Neustart, und das Spiel speichert beim Ausloggen, welche Folgen du fertig gehört hast.",
+    "import": "Importieren",
+    "download_ffmpeg": "ffmpeg herunterladen",
+    "status_looking": "Addon wird gesucht...",
+    "status_preparing": "Dein Musikordner wird vorbereitet...",
+    "status_ready": "Bereit.",
+    "status_no_ffmpeg": "ffmpeg fehlt: klicke auf „ffmpeg herunterladen“.",
+    "status_copying": "Wird kopiert...",
+    "status_importing": "Wird importiert...",
+    "status_importing_folder": "{folder} wird importiert...",
+    "status_writing": "Bibliothek wird geschrieben...",
+    "status_podcast_download": "{show} – {episode}: Download {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: Download {done} MB",
+    "status_podcast_convert": "{show} – {episode}: Umwandlung {percent} %",
+    "status_stopped": "Angehalten.",
+    "status_added": "Hinzugefügte Dateien: {count}",
+    "status_nothing_new": "Nichts Neues hinzuzufügen.",
+    "status_done": "Fertig. Titel in deiner Bibliothek: {tracks}",
+    "error_generic": "Etwas ist schiefgelaufen. Das liegt nicht an dir: bitte melde es unter\n{url}\nund füge "
+                     "den Text des Fensters bei (markieren, dann Strg+C).",
+    "error_stopped": "Der Import wurde angehalten. Der Grund steht im Fenster.",
+    "close_running": "Der Import ist noch nicht fertig. Trotzdem schließen?\nDu kannst ihn später erneut starten.",
+    "addon_not_found": "Das Addon {addon} wurde nicht automatisch gefunden.\n\nWähle seinen Ordner:\n{path}",
+    "addon_folder_title": "Ordner des Addons {addon}",
+    "ffmpeg_ask": "Dafür wird ffmpeg gebraucht, ein kostenloses Programm, das deine Musik umwandelt und Titel "
+                  "und Cover liest. Es ist noch nicht auf diesem PC.\n\nJetzt herunterladen? (etwa 110 MB, von "
+                  "github.com/GyanD/codexffmpeg)\n\nEs kommt nach {folder}\nSonst wird nichts auf deinem PC "
+                  "verändert: zum Entfernen diesen Ordner löschen.",
+    "ffmpeg_other_os": "Dafür wird ffmpeg gebraucht, ein kostenloses Programm, das Musik umwandelt.\n\nmacOS: "
+                       "installiere Homebrew (brew.sh) und führe  brew install ffmpeg  aus\nLinux: installiere das "
+                       "Paket ffmpeg (sudo apt install ffmpeg)",
+    "ffmpeg_downloading": "ffmpeg wird heruntergeladen: {done} / {total} MB",
+    "ffmpeg_failed": "ffmpeg konnte nicht heruntergeladen werden (der Grund steht im Fenster).\n\nPrüfe deine "
+                     "Internetverbindung und klicke auf „ffmpeg herunterladen“, um es erneut zu versuchen, oder "
+                     "installiere es selbst: öffne das Startmenü, tippe cmd, öffne die „Eingabeaufforderung“ und "
+                     "führe aus\n    winget install Gyan.FFmpeg",
+    "filetype_music": "Musikdateien",
+    "filetype_all": "Alle Dateien",
+    "add_files_title": "Musikdateien zum Hinzufügen auswählen",
+    "add_folder_title": "Musikordner zum Hinzufügen auswählen",
+    "bad_folder": "Wähle einen Ordner mit Musik außerhalb des Musikordners des Addons (und kein ganzes Laufwerk).",
+    "files_added_ask": "Zu deinem Musikordner hinzugefügte Dateien: {count}\n\nJetzt importieren?",
+    "already_there": "Diese Titel sind schon in deinem Musikordner.",
+    "library_title": "Wähle deine Musiksammlung",
+    "library_is_addon": "Das ist der Musikordner des Addons: wähle den Ordner, in dem du deine Musik aufbewahrst.",
+    "covers_title": "Ordner mit den Originaldateien (gleiche Ordner und Namen wie im Musikordner)",
+    "copy_confirm": "Neue Titel in deiner Musiksammlung: {count}\n\nIns Addon kopieren und importieren? Die Liste "
+                    "steht im Fenster.",
+    "done": "Fertig! Titel in deiner Bibliothek: {tracks}",
+    "done_converted": "Umgewandelt: {count}",
+    "done_copied": "Aus deiner Musiksammlung kopiert: {count}",
+    "done_warnings": "Warnungen: {count} (siehe Fenster).",
+    "done_restart": "Starte das Spiel komplett neu, um neue Titel zu hören (/reload reicht nicht).\nIm Spiel öffnet "
+                    "/kzz lib die Bibliothek, wo du deine Playlists erstellst.",
+    "crash": "Etwas ist schiefgelaufen:\n\n{text}\n\nBitte melde es unter {url}",
+}
+
+STRINGS["esES"] = {
+    "title": "Kalimdor ZugZug Radio - Importar música",
+    "heading": "Añade tu propia música a Kalimdor ZugZug Radio",
+    "steps": "1. Añade tu música.   2. Pulsa Importar.   3. Reinicia el juego.",
+    "music_frame": "Tu música",
+    "music_hint": "mp3, m4a, flac, ogg, wav... También carpetas enteras (por ejemplo una por álbum).",
+    "music_count": "Pistas en tu carpeta de música: {tracks}",
+    "music_count_convert": "Pistas en tu carpeta de música: {tracks} (por convertir: {convert})",
+    "add_files": "Añadir archivos...",
+    "add_folder": "Añadir una carpeta...",
+    "open_music": "Abrir la carpeta de música",
+    "library_frame": "Opcional: sincronizar con tu biblioteca de música",
+    "library_hint": "Si tu música está en una carpeta a la que sigues añadiendo cosas (iTunes, Plex, Música...), "
+                    "elígela: en cada importación se copian las pistas que el addon aún no tiene. Esa carpeta solo "
+                    "se lee, nunca se modifica.",
+    "not_set": "Sin definir",
+    "choose": "Elegir...",
+    "remove": "Quitar",
+    "options_frame": "Opciones",
+    "opt_rename": "Renombrar archivos con nombres no latinos (recomendado: puede que el juego no los reproduzca)",
+    "opt_keep": "Conservar los archivos originales tras convertirlos (si no, se borran: son copias)",
+    "covers_from": "Recuperar las carátulas que faltan de:",
+    "covers_library": "tu biblioteca de música",
+    "podcasts_frame": "Pódcasts",
+    "podcasts_hint": "Los últimos episodios de tus pódcasts se descargan en cada importación; en el juego siguen "
+                     "donde los dejaste.",
+    "podcasts_download": "Descargar episodios nuevos al importar",
+    "col_podcast": "Pódcast",
+    "col_keep": "Episodios",
+    "podcast_add": "Añadir...",
+    "podcast_edit": "Editar...",
+    "podcast_edit_title": "Ajustes del pódcast",
+    "podcast_mode_latest": "Conservar los últimos episodios",
+    "podcast_mode_order": "Escuchar en orden, desde un episodio que elija",
+    "podcast_pick_title": "Por dónde empezar",
+    "podcast_pick_prompt": "Elige el primer episodio que escuchar. Los siguientes van en orden: en cada importación se borran los episodios terminados y se descargan los siguientes. Importa con el juego cerrado, para que el progreso del addon esté guardado.",
+    "col_from": "Desde",
+    "from_latest": "últimos",
+    "podcast_add_title": "Añadir un pódcast",
+    "podcast_add_prompt": "Pega la dirección del pódcast: su feed RSS o su página de Apple Podcasts.",
+    "podcast_keep_label": "Episodios que conservar:",
+    "ok": "Aceptar",
+    "cancel": "Cancelar",
+    "podcast_checking": "Comprobando el pódcast...",
+    "podcast_added": "Pódcast añadido: {name}",
+    "podcast_bad": "No se pudo leer este pódcast:\n{error}\n\nComprueba la dirección e inténtalo de nuevo.",
+    "podcast_dup": "Este pódcast ya está en la lista.",
+    "podcast_remove_ask": "¿Quitar {name} de la lista?",
+    "podcast_delete_ask": "¿Borrar también los episodios de {name} ya descargados?",
+    "import_note": "Convertir una biblioteca grande o descargar y convertir pódcasts puede llevar tiempo, sobre todo la primera vez. Hazlo antes de iniciar el juego: la música nueva solo aparece tras reiniciarlo, y el juego guarda qué episodios terminaste al cerrar sesión.",
+    "import": "Importar",
+    "download_ffmpeg": "Descargar ffmpeg",
+    "status_looking": "Buscando el addon...",
+    "status_preparing": "Preparando tu carpeta de música...",
+    "status_ready": "Listo.",
+    "status_no_ffmpeg": "Falta ffmpeg: pulsa «Descargar ffmpeg».",
+    "status_copying": "Copiando...",
+    "status_importing": "Importando...",
+    "status_importing_folder": "Importando {folder}...",
+    "status_writing": "Escribiendo la biblioteca...",
+    "status_podcast_download": "{show} – {episode}: descargando {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: descargando {done} MB",
+    "status_podcast_convert": "{show} – {episode}: convirtiendo {percent} %",
+    "status_stopped": "Detenido.",
+    "status_added": "Archivos añadidos: {count}",
+    "status_nothing_new": "Nada nuevo que añadir.",
+    "status_done": "Hecho. Pistas en tu biblioteca: {tracks}",
+    "error_generic": "Algo ha fallado. No es culpa tuya: infórmalo en\n{url}\ne incluye el texto de la ventana "
+                     "(selecciónalo y pulsa Ctrl+C).",
+    "error_stopped": "La importación se ha detenido. El motivo está en la ventana.",
+    "close_running": "La importación no ha terminado. ¿Cerrar de todos modos?\nPuedes volver a lanzarla más tarde.",
+    "addon_not_found": "No se ha encontrado el addon {addon} automáticamente.\n\nElige su carpeta:\n{path}",
+    "addon_folder_title": "Carpeta del addon {addon}",
+    "ffmpeg_ask": "Hace falta ffmpeg, un programa gratuito que convierte tu música y lee sus títulos y carátulas. "
+                  "Aún no está en este PC.\n\n¿Descargarlo ahora? (unos 110 MB, de github.com/GyanD/codexffmpeg)"
+                  "\n\nSe guardará en {folder}\nNo se cambia nada más en tu PC: para quitarlo, borra esa carpeta.",
+    "ffmpeg_other_os": "Hace falta ffmpeg, un programa gratuito que convierte música.\n\nmacOS: instala Homebrew "
+                       "(brew.sh) y ejecuta  brew install ffmpeg\nLinux: instala el paquete ffmpeg (sudo apt "
+                       "install ffmpeg)",
+    "ffmpeg_downloading": "Descargando ffmpeg: {done} / {total} MB",
+    "ffmpeg_failed": "No se pudo descargar ffmpeg (el motivo está en la ventana).\n\nComprueba tu conexión y pulsa "
+                     "«Descargar ffmpeg» para reintentarlo, o instálalo tú: abre el menú Inicio, escribe cmd, abre "
+                     "el «Símbolo del sistema» y ejecuta\n    winget install Gyan.FFmpeg",
+    "filetype_music": "Archivos de música",
+    "filetype_all": "Todos los archivos",
+    "add_files_title": "Elige los archivos de música que añadir",
+    "add_folder_title": "Elige una carpeta de música que añadir",
+    "bad_folder": "Elige una carpeta con música, fuera de la carpeta de música del addon (y no una unidad entera).",
+    "files_added_ask": "Archivos añadidos a tu carpeta de música: {count}\n\n¿Importarlos ahora?",
+    "already_there": "Estas pistas ya están en tu carpeta de música.",
+    "library_title": "Elige tu biblioteca de música",
+    "library_is_addon": "Esa es la carpeta de música del addon: elige la carpeta donde guardas tu música.",
+    "covers_title": "Carpeta con los archivos originales (mismas carpetas y nombres que en la carpeta de música)",
+    "copy_confirm": "Pistas nuevas en tu biblioteca de música: {count}\n\n¿Copiarlas al addon e importarlas? La "
+                    "lista está en la ventana.",
+    "done": "¡Hecho! Pistas en tu biblioteca: {tracks}",
+    "done_converted": "Convertidas: {count}",
+    "done_copied": "Copiadas de tu biblioteca de música: {count}",
+    "done_warnings": "Avisos: {count} (mira la ventana).",
+    "done_restart": "Reinicia el juego por completo para oír las pistas nuevas (/reload no basta).\nEn el juego, "
+                    "/kzz lib abre la biblioteca, donde creas tus listas.",
+    "crash": "Algo ha fallado:\n\n{text}\n\nInfórmalo en {url}",
+}
+
+STRINGS["esMX"] = dict(STRINGS["esES"])
+
+STRINGS["ptBR"] = {
+    "title": "Kalimdor ZugZug Radio - Importar música",
+    "heading": "Adicione sua própria música ao Kalimdor ZugZug Radio",
+    "steps": "1. Adicione sua música.   2. Clique em Importar.   3. Reinicie o jogo.",
+    "music_frame": "Sua música",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Pastas inteiras (por exemplo uma por álbum) também servem.",
+    "music_count": "Faixas na sua pasta de música: {tracks}",
+    "music_count_convert": "Faixas na sua pasta de música: {tracks} (a converter: {convert})",
+    "add_files": "Adicionar arquivos...",
+    "add_folder": "Adicionar uma pasta...",
+    "open_music": "Abrir a pasta de música",
+    "library_frame": "Opcional: sincronizar com sua biblioteca de música",
+    "library_hint": "Se sua música está numa pasta à qual você sempre adiciona coisas (iTunes, Plex, Música...), "
+                    "escolha-a: a cada importação, as faixas que o addon ainda não tem são copiadas. Essa pasta só "
+                    "é lida, nunca alterada.",
+    "not_set": "Não definida",
+    "choose": "Escolher...",
+    "remove": "Remover",
+    "options_frame": "Opções",
+    "opt_rename": "Renomear arquivos com nomes não latinos (recomendado: o jogo pode não tocá-los)",
+    "opt_keep": "Manter os arquivos originais depois de convertê-los (senão são apagados: são cópias)",
+    "covers_from": "Recuperar capas que faltam de:",
+    "covers_library": "sua biblioteca de música",
+    "podcasts_frame": "Podcasts",
+    "podcasts_hint": "Os episódios mais recentes dos seus podcasts são baixados a cada importação; no jogo eles "
+                     "continuam de onde você parou.",
+    "podcasts_download": "Baixar episódios novos ao importar",
+    "col_podcast": "Podcast",
+    "col_keep": "Episódios",
+    "podcast_add": "Adicionar...",
+    "podcast_edit": "Editar...",
+    "podcast_edit_title": "Ajustes do podcast",
+    "podcast_mode_latest": "Manter os episódios mais recentes",
+    "podcast_mode_order": "Ouvir em ordem, a partir de um episódio que eu escolher",
+    "podcast_pick_title": "Por onde começar",
+    "podcast_pick_prompt": "Escolha o primeiro episódio a ouvir. Os próximos vêm em ordem: a cada importação, os episódios terminados são apagados e os seguintes baixados. Importe com o jogo fechado, para que o progresso do addon esteja salvo.",
+    "col_from": "Desde",
+    "from_latest": "recentes",
+    "podcast_add_title": "Adicionar um podcast",
+    "podcast_add_prompt": "Cole o endereço do podcast: o feed RSS ou a página no Apple Podcasts.",
+    "podcast_keep_label": "Episódios a manter:",
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "podcast_checking": "Verificando o podcast...",
+    "podcast_added": "Podcast adicionado: {name}",
+    "podcast_bad": "Não foi possível ler este podcast:\n{error}\n\nConfira o endereço e tente de novo.",
+    "podcast_dup": "Este podcast já está na lista.",
+    "podcast_remove_ask": "Remover {name} da lista?",
+    "podcast_delete_ask": "Apagar também os episódios de {name} já baixados?",
+    "import_note": "Converter uma biblioteca grande ou baixar e converter podcasts pode demorar, principalmente na primeira vez. Faça isso antes de abrir o jogo: músicas novas só aparecem depois de reiniciá-lo, e o jogo salva quais episódios você terminou quando você sai.",
+    "import": "Importar",
+    "download_ffmpeg": "Baixar ffmpeg",
+    "status_looking": "Procurando o addon...",
+    "status_preparing": "Preparando sua pasta de música...",
+    "status_ready": "Pronto.",
+    "status_no_ffmpeg": "Falta o ffmpeg: clique em \"Baixar ffmpeg\".",
+    "status_copying": "Copiando...",
+    "status_importing": "Importando...",
+    "status_importing_folder": "Importando {folder}...",
+    "status_writing": "Gravando a biblioteca...",
+    "status_podcast_download": "{show} – {episode}: baixando {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: baixando {done} MB",
+    "status_podcast_convert": "{show} – {episode}: convertendo {percent}%",
+    "status_stopped": "Interrompido.",
+    "status_added": "Arquivos adicionados: {count}",
+    "status_nothing_new": "Nada novo para adicionar.",
+    "status_done": "Concluído. Faixas na sua biblioteca: {tracks}",
+    "error_generic": "Algo deu errado. Não foi nada que você fez: relate em\n{url}\ne inclua o texto da janela "
+                     "(selecione-o e pressione Ctrl+C).",
+    "error_stopped": "A importação parou. O motivo está na janela.",
+    "close_running": "A importação ainda não terminou. Fechar mesmo assim?\nVocê pode executá-la de novo depois.",
+    "addon_not_found": "O addon {addon} não foi encontrado automaticamente.\n\nEscolha a pasta dele:\n{path}",
+    "addon_folder_title": "Pasta do addon {addon}",
+    "ffmpeg_ask": "É preciso o ffmpeg, um programa gratuito que converte sua música e lê títulos e capas. Ele "
+                  "ainda não está neste PC.\n\nBaixar agora? (cerca de 110 MB, de github.com/GyanD/codexffmpeg)"
+                  "\n\nEle vai para {folder}\nNada mais é alterado no seu PC: para removê-lo, apague essa pasta.",
+    "ffmpeg_other_os": "É preciso o ffmpeg, um programa gratuito que converte música.\n\nmacOS: instale o Homebrew "
+                       "(brew.sh) e execute  brew install ffmpeg\nLinux: instale o pacote ffmpeg (sudo apt install "
+                       "ffmpeg)",
+    "ffmpeg_downloading": "Baixando o ffmpeg: {done} / {total} MB",
+    "ffmpeg_failed": "Não foi possível baixar o ffmpeg (o motivo está na janela).\n\nVerifique sua conexão e clique "
+                     "em \"Baixar ffmpeg\" para tentar de novo, ou instale você mesmo: abra o menu Iniciar, digite "
+                     "cmd, abra o \"Prompt de Comando\" e execute\n    winget install Gyan.FFmpeg",
+    "filetype_music": "Arquivos de música",
+    "filetype_all": "Todos os arquivos",
+    "add_files_title": "Escolha os arquivos de música a adicionar",
+    "add_folder_title": "Escolha uma pasta de música a adicionar",
+    "bad_folder": "Escolha uma pasta com música, fora da pasta de música do addon (e não um disco inteiro).",
+    "files_added_ask": "Arquivos adicionados à sua pasta de música: {count}\n\nImportar agora?",
+    "already_there": "Essas faixas já estão na sua pasta de música.",
+    "library_title": "Escolha sua biblioteca de música",
+    "library_is_addon": "Essa é a pasta de música do addon: escolha a pasta onde você guarda sua música.",
+    "covers_title": "Pasta com os arquivos originais (mesmas pastas e nomes da pasta de música)",
+    "copy_confirm": "Faixas novas na sua biblioteca de música: {count}\n\nCopiá-las para o addon e importá-las? A "
+                    "lista está na janela.",
+    "done": "Pronto! Faixas na sua biblioteca: {tracks}",
+    "done_converted": "Convertidas: {count}",
+    "done_copied": "Copiadas da sua biblioteca de música: {count}",
+    "done_warnings": "Avisos: {count} (veja a janela).",
+    "done_restart": "Reinicie o jogo por completo para ouvir as faixas novas (/reload não basta).\nNo jogo, /kzz lib "
+                    "abre a biblioteca, onde você cria suas playlists.",
+    "crash": "Algo deu errado:\n\n{text}\n\nRelate em {url}",
+}
+
+STRINGS["itIT"] = {
+    "title": "Kalimdor ZugZug Radio - Importa musica",
+    "heading": "Aggiungi la tua musica a Kalimdor ZugZug Radio",
+    "steps": "1. Aggiungi la tua musica.   2. Premi Importa.   3. Riavvia il gioco.",
+    "music_frame": "La tua musica",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Vanno bene anche cartelle intere (per esempio una per album).",
+    "music_count": "Brani nella tua cartella della musica: {tracks}",
+    "music_count_convert": "Brani nella tua cartella della musica: {tracks} (da convertire: {convert})",
+    "add_files": "Aggiungi file...",
+    "add_folder": "Aggiungi una cartella...",
+    "open_music": "Apri la cartella della musica",
+    "library_frame": "Facoltativo: sincronizza con la tua libreria musicale",
+    "library_hint": "Se la tua musica è in una cartella a cui continui ad aggiungere brani (iTunes, Plex, Musica...), "
+                    "sceglila: a ogni importazione vengono copiati i brani che l'addon non ha ancora. Quella "
+                    "cartella viene solo letta, mai modificata.",
+    "not_set": "Non impostata",
+    "choose": "Scegli...",
+    "remove": "Rimuovi",
+    "options_frame": "Opzioni",
+    "opt_rename": "Rinomina i file con nomi non latini (consigliato: il gioco potrebbe non riprodurli)",
+    "opt_keep": "Conserva i file originali dopo la conversione (altrimenti vengono eliminati: sono copie)",
+    "covers_from": "Recupera le copertine mancanti da:",
+    "covers_library": "la tua libreria musicale",
+    "podcasts_frame": "Podcast",
+    "podcasts_hint": "Gli ultimi episodi dei tuoi podcast vengono scaricati a ogni importazione; in gioco riprendono "
+                     "da dove avevi lasciato.",
+    "podcasts_download": "Scarica i nuovi episodi durante l'importazione",
+    "col_podcast": "Podcast",
+    "col_keep": "Episodi",
+    "podcast_add": "Aggiungi...",
+    "podcast_edit": "Modifica...",
+    "podcast_edit_title": "Impostazioni del podcast",
+    "podcast_mode_latest": "Tieni gli episodi più recenti",
+    "podcast_mode_order": "Ascolta in ordine, da un episodio a scelta",
+    "podcast_pick_title": "Da dove iniziare",
+    "podcast_pick_prompt": "Scegli il primo episodio da ascoltare. I successivi seguono in ordine: a ogni importazione gli episodi finiti vengono eliminati e vengono scaricati i seguenti. Importa con il gioco chiuso, così i progressi dell'addon sono salvati.",
+    "col_from": "Da",
+    "from_latest": "recenti",
+    "podcast_add_title": "Aggiungi un podcast",
+    "podcast_add_prompt": "Incolla l'indirizzo del podcast: il suo feed RSS o la sua pagina di Apple Podcasts.",
+    "podcast_keep_label": "Episodi da tenere:",
+    "ok": "OK",
+    "cancel": "Annulla",
+    "podcast_checking": "Controllo del podcast...",
+    "podcast_added": "Podcast aggiunto: {name}",
+    "podcast_bad": "Impossibile leggere questo podcast:\n{error}\n\nControlla l'indirizzo e riprova.",
+    "podcast_dup": "Questo podcast è già nella lista.",
+    "podcast_remove_ask": "Rimuovere {name} dalla lista?",
+    "podcast_delete_ask": "Eliminare anche gli episodi di {name} già scaricati?",
+    "import_note": "Convertire una libreria grande o scaricare e convertire i podcast può richiedere tempo, soprattutto la prima volta. Fallo prima di avviare il gioco: la nuova musica si vede solo dopo un riavvio, e il gioco salva gli episodi che hai finito quando esci.",
+    "import": "Importa",
+    "download_ffmpeg": "Scarica ffmpeg",
+    "status_looking": "Ricerca dell'addon...",
+    "status_preparing": "Preparazione della cartella della musica...",
+    "status_ready": "Pronto.",
+    "status_no_ffmpeg": "Manca ffmpeg: premi \"Scarica ffmpeg\".",
+    "status_copying": "Copia in corso...",
+    "status_importing": "Importazione in corso...",
+    "status_importing_folder": "Importazione di {folder}...",
+    "status_writing": "Scrittura della libreria...",
+    "status_podcast_download": "{show} – {episode}: download {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: download {done} MB",
+    "status_podcast_convert": "{show} – {episode}: conversione {percent}%",
+    "status_stopped": "Interrotto.",
+    "status_added": "File aggiunti: {count}",
+    "status_nothing_new": "Niente di nuovo da aggiungere.",
+    "status_done": "Fatto. Brani nella tua libreria: {tracks}",
+    "error_generic": "Qualcosa è andato storto. Non è colpa tua: segnalalo su\n{url}\nincludendo il testo della "
+                     "finestra (selezionalo, poi Ctrl+C).",
+    "error_stopped": "L'importazione si è interrotta. Il motivo è nella finestra.",
+    "close_running": "L'importazione non è ancora finita. Chiudere comunque?\nPotrai rilanciarla più tardi.",
+    "addon_not_found": "L'addon {addon} non è stato trovato automaticamente.\n\nScegli la sua cartella:\n{path}",
+    "addon_folder_title": "Cartella dell'addon {addon}",
+    "ffmpeg_ask": "Serve ffmpeg, un programma gratuito che converte la tua musica e ne legge titoli e copertine. "
+                  "Non è ancora su questo PC.\n\nScaricarlo ora? (circa 110 MB, da github.com/GyanD/codexffmpeg)"
+                  "\n\nVa in {folder}\nNient'altro viene modificato sul tuo PC: per toglierlo, elimina quella "
+                  "cartella.",
+    "ffmpeg_other_os": "Serve ffmpeg, un programma gratuito che converte la musica.\n\nmacOS: installa Homebrew "
+                       "(brew.sh), poi esegui  brew install ffmpeg\nLinux: installa il pacchetto ffmpeg (sudo apt "
+                       "install ffmpeg)",
+    "ffmpeg_downloading": "Download di ffmpeg: {done} / {total} MB",
+    "ffmpeg_failed": "Non è stato possibile scaricare ffmpeg (il motivo è nella finestra).\n\nControlla la "
+                     "connessione e premi \"Scarica ffmpeg\" per riprovare, oppure installalo tu: apri il menu "
+                     "Start, scrivi cmd, apri il \"Prompt dei comandi\" ed esegui\n    winget install Gyan.FFmpeg",
+    "filetype_music": "File musicali",
+    "filetype_all": "Tutti i file",
+    "add_files_title": "Scegli i file musicali da aggiungere",
+    "add_folder_title": "Scegli una cartella di musica da aggiungere",
+    "bad_folder": "Scegli una cartella con musica, fuori dalla cartella della musica dell'addon (e non un intero "
+                  "disco).",
+    "files_added_ask": "File aggiunti alla tua cartella della musica: {count}\n\nImportarli ora?",
+    "already_there": "Questi brani sono già nella tua cartella della musica.",
+    "library_title": "Scegli la tua libreria musicale",
+    "library_is_addon": "Questa è la cartella della musica dell'addon: scegli la cartella dove tieni la tua musica.",
+    "covers_title": "Cartella con i file originali (stesse cartelle e nomi della cartella della musica)",
+    "copy_confirm": "Brani nuovi nella tua libreria musicale: {count}\n\nCopiarli nell'addon e importarli? L'elenco "
+                    "è nella finestra.",
+    "done": "Fatto! Brani nella tua libreria: {tracks}",
+    "done_converted": "Convertiti: {count}",
+    "done_copied": "Copiati dalla tua libreria musicale: {count}",
+    "done_warnings": "Avvisi: {count} (vedi la finestra).",
+    "done_restart": "Riavvia completamente il gioco per sentire i nuovi brani (/reload non basta).\nIn gioco, "
+                    "/kzz lib apre la libreria, dove crei le tue playlist.",
+    "crash": "Qualcosa è andato storto:\n\n{text}\n\nSegnalalo su {url}",
+}
+
+STRINGS["ruRU"] = {
+    "title": "Kalimdor ZugZug Radio - Импорт музыки",
+    "heading": "Добавьте свою музыку в Kalimdor ZugZug Radio",
+    "steps": "1. Добавьте музыку.   2. Нажмите «Импорт».   3. Перезапустите игру.",
+    "music_frame": "Ваша музыка",
+    "music_hint": "mp3, m4a, flac, ogg, wav... Можно целыми папками (например, по одной на альбом).",
+    "music_count": "Треков в папке музыки: {tracks}",
+    "music_count_convert": "Треков в папке музыки: {tracks} (нужно конвертировать: {convert})",
+    "add_files": "Добавить файлы...",
+    "add_folder": "Добавить папку...",
+    "open_music": "Открыть папку музыки",
+    "library_frame": "Необязательно: синхронизация с вашей музыкальной библиотекой",
+    "library_hint": "Если ваша музыка лежит в папке, которую вы пополняете (iTunes, Plex, «Музыка»...), выберите её: "
+                    "при каждом импорте копируются треки, которых ещё нет в аддоне. Эта папка только читается и "
+                    "никогда не изменяется.",
+    "not_set": "Не задана",
+    "choose": "Выбрать...",
+    "remove": "Убрать",
+    "options_frame": "Настройки",
+    "opt_rename": "Переименовывать файлы с нелатинскими именами (рекомендуется: игра может их не воспроизвести)",
+    "opt_keep": "Сохранять исходные файлы после конвертации (иначе они удаляются: это копии)",
+    "covers_from": "Восстановить недостающие обложки из:",
+    "covers_library": "вашей музыкальной библиотеки",
+    "podcasts_frame": "Подкасты",
+    "podcasts_hint": "Новые выпуски ваших подкастов скачиваются при каждом импорте; в игре они продолжаются с того "
+                     "места, где вы остановились.",
+    "podcasts_download": "Скачивать новые выпуски при импорте",
+    "col_podcast": "Подкаст",
+    "col_keep": "Выпуски",
+    "podcast_add": "Добавить...",
+    "podcast_edit": "Изменить...",
+    "podcast_edit_title": "Настройки подкаста",
+    "podcast_mode_latest": "Хранить последние выпуски",
+    "podcast_mode_order": "Слушать по порядку, начиная с выбранного выпуска",
+    "podcast_pick_title": "С чего начать",
+    "podcast_pick_prompt": "Выберите первый выпуск. Следующие идут по порядку: при каждом импорте прослушанные выпуски удаляются, а следующие скачиваются. Запускайте импорт при закрытой игре, чтобы прогресс аддона был сохранён.",
+    "col_from": "С",
+    "from_latest": "последние",
+    "podcast_add_title": "Добавить подкаст",
+    "podcast_add_prompt": "Вставьте адрес подкаста: его RSS-ленту или страницу в Apple Podcasts.",
+    "podcast_keep_label": "Сколько выпусков хранить:",
+    "ok": "ОК",
+    "cancel": "Отмена",
+    "podcast_checking": "Проверка подкаста...",
+    "podcast_added": "Подкаст добавлен: {name}",
+    "podcast_bad": "Не удалось прочитать этот подкаст:\n{error}\n\nПроверьте адрес и попробуйте снова.",
+    "podcast_dup": "Этот подкаст уже есть в списке.",
+    "podcast_remove_ask": "Убрать {name} из списка?",
+    "podcast_delete_ask": "Удалить и уже скачанные выпуски {name}?",
+    "import_note": "Конвертация большой библиотеки или загрузка и конвертация подкастов может занять время, особенно в первый раз. Делайте это до запуска игры: новая музыка появляется только после перезапуска, а игра сохраняет прослушанные выпуски при выходе.",
+    "import": "Импорт",
+    "download_ffmpeg": "Скачать ffmpeg",
+    "status_looking": "Поиск аддона...",
+    "status_preparing": "Подготовка папки музыки...",
+    "status_ready": "Готово к работе.",
+    "status_no_ffmpeg": "Нет ffmpeg: нажмите «Скачать ffmpeg».",
+    "status_copying": "Копирование...",
+    "status_importing": "Импорт...",
+    "status_importing_folder": "Импорт: {folder}...",
+    "status_writing": "Запись библиотеки...",
+    "status_podcast_download": "{show} – {episode}: загрузка {done} / {total} МБ",
+    "status_podcast_download_nosize": "{show} – {episode}: загрузка {done} МБ",
+    "status_podcast_convert": "{show} – {episode}: конвертация {percent}%",
+    "status_stopped": "Остановлено.",
+    "status_added": "Добавлено файлов: {count}",
+    "status_nothing_new": "Нечего добавлять.",
+    "status_done": "Готово. Треков в библиотеке: {tracks}",
+    "error_generic": "Что-то пошло не так, и это не ваша вина. Пожалуйста, сообщите об этом здесь:\n{url}\nи "
+                     "приложите текст из окна (выделите его и нажмите Ctrl+C).",
+    "error_stopped": "Импорт остановлен. Причина указана в окне.",
+    "close_running": "Импорт ещё не закончен. Всё равно закрыть?\nЕго можно запустить снова позже.",
+    "addon_not_found": "Аддон {addon} не найден автоматически.\n\nВыберите его папку:\n{path}",
+    "addon_folder_title": "Папка аддона {addon}",
+    "ffmpeg_ask": "Нужен ffmpeg — бесплатная программа, которая конвертирует музыку и читает названия и обложки. "
+                  "На этом ПК её пока нет.\n\nСкачать сейчас? (около 110 МБ, с github.com/GyanD/codexffmpeg)\n\n"
+                  "Она будет в {folder}\nБольше ничего на ПК не меняется: чтобы удалить её, удалите эту папку.",
+    "ffmpeg_other_os": "Нужен ffmpeg — бесплатная программа для конвертации музыки.\n\nmacOS: установите Homebrew "
+                       "(brew.sh) и выполните  brew install ffmpeg\nLinux: установите пакет ffmpeg (sudo apt "
+                       "install ffmpeg)",
+    "ffmpeg_downloading": "Загрузка ffmpeg: {done} / {total} МБ",
+    "ffmpeg_failed": "Не удалось скачать ffmpeg (причина указана в окне).\n\nПроверьте подключение к интернету и "
+                     "нажмите «Скачать ffmpeg», чтобы попробовать снова, или установите его сами: откройте меню "
+                     "«Пуск», введите cmd, откройте «Командную строку» и выполните\n    winget install Gyan.FFmpeg",
+    "filetype_music": "Музыкальные файлы",
+    "filetype_all": "Все файлы",
+    "add_files_title": "Выберите музыкальные файлы",
+    "add_folder_title": "Выберите папку с музыкой",
+    "bad_folder": "Выберите папку с музыкой вне папки музыки аддона (и не весь диск).",
+    "files_added_ask": "Добавлено файлов в папку музыки: {count}\n\nИмпортировать их сейчас?",
+    "already_there": "Эти треки уже есть в папке музыки.",
+    "library_title": "Выберите вашу музыкальную библиотеку",
+    "library_is_addon": "Это папка музыки самого аддона: выберите папку, где вы храните свою музыку.",
+    "covers_title": "Папка с исходными файлами (те же папки и имена, что и в папке музыки)",
+    "copy_confirm": "Новых треков в вашей музыкальной библиотеке: {count}\n\nСкопировать их в аддон и "
+                    "импортировать? Список — в окне.",
+    "done": "Готово! Треков в библиотеке: {tracks}",
+    "done_converted": "Сконвертировано: {count}",
+    "done_copied": "Скопировано из музыкальной библиотеки: {count}",
+    "done_warnings": "Предупреждений: {count} (см. окно).",
+    "done_restart": "Полностью перезапустите игру, чтобы услышать новые треки (/reload недостаточно).\nВ игре "
+                    "/kzz lib открывает библиотеку, где вы создаёте плейлисты.",
+    "crash": "Что-то пошло не так:\n\n{text}\n\nПожалуйста, сообщите об этом: {url}",
+}
+
+STRINGS["zhCN"] = {
+    "title": "Kalimdor ZugZug Radio - 导入音乐",
+    "heading": "把你自己的音乐加入 Kalimdor ZugZug Radio",
+    "steps": "1. 添加你的音乐。   2. 点击“导入”。   3. 重启游戏。",
+    "music_frame": "你的音乐",
+    "music_hint": "mp3、m4a、flac、ogg、wav…… 也可以添加整个文件夹（例如每张专辑一个）。",
+    "music_count": "音乐文件夹中的曲目：{tracks}",
+    "music_count_convert": "音乐文件夹中的曲目：{tracks}（待转换：{convert}）",
+    "add_files": "添加文件……",
+    "add_folder": "添加文件夹……",
+    "open_music": "打开音乐文件夹",
+    "library_frame": "可选：与你的音乐库同步",
+    "library_hint": "如果你的音乐放在一个经常添加新歌的文件夹里（iTunes、Plex、音乐……），请选择它：每次导入时，"
+                    "插件还没有的曲目会被复制过来。该文件夹只会被读取，不会被修改。",
+    "not_set": "未设置",
+    "choose": "选择……",
+    "remove": "移除",
+    "options_frame": "选项",
+    "opt_rename": "重命名非拉丁字母的文件名（推荐：游戏可能无法播放它们）",
+    "opt_keep": "转换后保留原始文件（否则会被删除：它们是副本）",
+    "covers_from": "从以下位置找回缺失的封面：",
+    "covers_library": "你的音乐库",
+    "podcasts_frame": "播客",
+    "podcasts_hint": "每次导入时都会下载你的播客的最新几集；在游戏中会从上次停下的地方继续播放。",
+    "podcasts_download": "导入时下载新的剧集",
+    "col_podcast": "播客",
+    "col_keep": "集数",
+    "podcast_add": "添加……",
+    "podcast_edit": "编辑……",
+    "podcast_edit_title": "播客设置",
+    "podcast_mode_latest": "保留最新的剧集",
+    "podcast_mode_order": "按顺序收听，从我选择的一集开始",
+    "podcast_pick_title": "从哪里开始",
+    "podcast_pick_prompt": "选择要收听的第一集。之后的剧集按顺序排列：每次导入时，听完的剧集会被删除，并下载接下来的剧集。请在关闭游戏后导入，这样插件的进度才会被保存。",
+    "col_from": "起始",
+    "from_latest": "最新",
+    "podcast_add_title": "添加播客",
+    "podcast_add_prompt": "粘贴播客的地址：它的 RSS 订阅源或 Apple Podcasts 页面。",
+    "podcast_keep_label": "保留的集数：",
+    "ok": "确定",
+    "cancel": "取消",
+    "podcast_checking": "正在检查播客……",
+    "podcast_added": "已添加播客：{name}",
+    "podcast_bad": "无法读取这个播客：\n{error}\n\n请检查地址后重试。",
+    "podcast_dup": "这个播客已经在列表中。",
+    "podcast_remove_ask": "从列表中移除 {name}？",
+    "podcast_delete_ask": "同时删除已下载的 {name} 剧集？",
+    "import_note": "转换大型音乐库或下载并转换播客可能需要一些时间，第一次尤其如此。请在启动游戏前进行：新音乐只有在重启游戏后才会出现，而游戏会在你退出时保存哪些播客剧集已听完。",
+    "import": "导入",
+    "download_ffmpeg": "下载 ffmpeg",
+    "status_looking": "正在查找插件……",
+    "status_preparing": "正在准备你的音乐文件夹……",
+    "status_ready": "准备就绪。",
+    "status_no_ffmpeg": "缺少 ffmpeg：请点击“下载 ffmpeg”。",
+    "status_copying": "正在复制……",
+    "status_importing": "正在导入……",
+    "status_importing_folder": "正在导入 {folder}……",
+    "status_writing": "正在写入音乐库……",
+    "status_podcast_download": "{show} – {episode}：正在下载 {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}：正在下载 {done} MB",
+    "status_podcast_convert": "{show} – {episode}：正在转换 {percent}%",
+    "status_stopped": "已停止。",
+    "status_added": "已添加文件：{count}",
+    "status_nothing_new": "没有新内容可添加。",
+    "status_done": "完成。音乐库中的曲目：{tracks}",
+    "error_generic": "出错了，这不是你的操作造成的。请在以下地址报告：\n{url}\n并附上窗口中的文字（选中后按 Ctrl+C）。",
+    "error_stopped": "导入已停止。原因见窗口中的文字。",
+    "close_running": "导入尚未完成。仍要关闭吗？\n你可以稍后再次运行。",
+    "addon_not_found": "未能自动找到插件 {addon}。\n\n请选择它的文件夹：\n{path}",
+    "addon_folder_title": "插件 {addon} 的文件夹",
+    "ffmpeg_ask": "需要 ffmpeg，这是一个免费程序，用于转换你的音乐并读取标题和封面。此电脑上还没有它。\n\n"
+                  "现在下载吗？（约 110 MB，来自 github.com/GyanD/codexffmpeg）\n\n它会放在 {folder}\n"
+                  "电脑上的其他内容都不会改变：要移除它，删除该文件夹即可。",
+    "ffmpeg_other_os": "需要 ffmpeg，这是一个用于转换音乐的免费程序。\n\nmacOS：安装 Homebrew（brew.sh），然后运行  "
+                       "brew install ffmpeg\nLinux：安装 ffmpeg 软件包（sudo apt install ffmpeg）",
+    "ffmpeg_downloading": "正在下载 ffmpeg：{done} / {total} MB",
+    "ffmpeg_failed": "无法下载 ffmpeg（原因见窗口中的文字）。\n\n请检查网络连接，然后点击“下载 ffmpeg”重试，"
+                     "或自行安装：打开开始菜单，输入 cmd，打开“命令提示符”并运行\n    winget install Gyan.FFmpeg",
+    "filetype_music": "音乐文件",
+    "filetype_all": "所有文件",
+    "add_files_title": "选择要添加的音乐文件",
+    "add_folder_title": "选择要添加的音乐文件夹",
+    "bad_folder": "请选择一个有音乐的文件夹，不能在插件的音乐文件夹内（也不能是整个磁盘）。",
+    "files_added_ask": "已添加到音乐文件夹的文件：{count}\n\n现在导入吗？",
+    "already_there": "这些曲目已经在你的音乐文件夹中。",
+    "library_title": "选择你的音乐库",
+    "library_is_addon": "这是插件自己的音乐文件夹：请选择你存放音乐的文件夹。",
+    "covers_title": "包含原始文件的文件夹（文件夹和文件名与音乐文件夹中相同）",
+    "copy_confirm": "你的音乐库中的新曲目：{count}\n\n复制到插件并导入吗？列表见窗口。",
+    "done": "完成！音乐库中的曲目：{tracks}",
+    "done_converted": "已转换：{count}",
+    "done_copied": "从你的音乐库复制：{count}",
+    "done_warnings": "警告：{count}（见窗口）。",
+    "done_restart": "请完全重启游戏以听到新曲目（/reload 不够）。\n在游戏中，/kzz lib 打开音乐库，你可以在那里创建播放列表。",
+    "crash": "出错了：\n\n{text}\n\n请在 {url} 报告",
+}
+
+STRINGS["zhTW"] = {
+    "title": "Kalimdor ZugZug Radio - 匯入音樂",
+    "heading": "把你自己的音樂加入 Kalimdor ZugZug Radio",
+    "steps": "1. 加入你的音樂。   2. 按「匯入」。   3. 重新啟動遊戲。",
+    "music_frame": "你的音樂",
+    "music_hint": "mp3、m4a、flac、ogg、wav…… 也可以加入整個資料夾（例如每張專輯一個）。",
+    "music_count": "音樂資料夾中的曲目：{tracks}",
+    "music_count_convert": "音樂資料夾中的曲目：{tracks}（待轉換：{convert}）",
+    "add_files": "加入檔案……",
+    "add_folder": "加入資料夾……",
+    "open_music": "開啟音樂資料夾",
+    "library_frame": "選用：與你的音樂庫同步",
+    "library_hint": "如果你的音樂放在一個經常加入新歌的資料夾裡（iTunes、Plex、音樂……），請選擇它：每次匯入時，"
+                    "插件還沒有的曲目會被複製過來。該資料夾只會被讀取，不會被修改。",
+    "not_set": "未設定",
+    "choose": "選擇……",
+    "remove": "移除",
+    "options_frame": "選項",
+    "opt_rename": "重新命名非拉丁字母的檔名（建議：遊戲可能無法播放它們）",
+    "opt_keep": "轉換後保留原始檔案（否則會被刪除：它們是副本）",
+    "covers_from": "從以下位置找回缺少的封面：",
+    "covers_library": "你的音樂庫",
+    "podcasts_frame": "Podcast",
+    "podcasts_hint": "每次匯入時都會下載你的 Podcast 的最新幾集；在遊戲中會從上次停下的地方繼續播放。",
+    "podcasts_download": "匯入時下載新的單集",
+    "col_podcast": "Podcast",
+    "col_keep": "集數",
+    "podcast_add": "加入……",
+    "podcast_edit": "編輯……",
+    "podcast_edit_title": "Podcast 設定",
+    "podcast_mode_latest": "保留最新的單集",
+    "podcast_mode_order": "依序收聽，從我選擇的一集開始",
+    "podcast_pick_title": "從哪裡開始",
+    "podcast_pick_prompt": "選擇要收聽的第一集。之後的單集依序排列：每次匯入時，聽完的單集會被刪除，並下載接下來的單集。請在關閉遊戲後匯入，這樣插件的進度才會被儲存。",
+    "col_from": "起始",
+    "from_latest": "最新",
+    "podcast_add_title": "加入 Podcast",
+    "podcast_add_prompt": "貼上 Podcast 的網址：它的 RSS 訂閱源或 Apple Podcasts 頁面。",
+    "podcast_keep_label": "保留的集數：",
+    "ok": "確定",
+    "cancel": "取消",
+    "podcast_checking": "正在檢查 Podcast……",
+    "podcast_added": "已加入 Podcast：{name}",
+    "podcast_bad": "無法讀取這個 Podcast：\n{error}\n\n請檢查網址後重試。",
+    "podcast_dup": "這個 Podcast 已經在清單中。",
+    "podcast_remove_ask": "從清單中移除 {name}？",
+    "podcast_delete_ask": "同時刪除已下載的 {name} 單集？",
+    "import_note": "轉換大型音樂庫或下載並轉換 Podcast 可能需要一些時間，第一次尤其如此。請在啟動遊戲前進行：新音樂只有在重新啟動遊戲後才會出現，而遊戲會在你登出時儲存哪些單集已聽完。",
+    "import": "匯入",
+    "download_ffmpeg": "下載 ffmpeg",
+    "status_looking": "正在尋找插件……",
+    "status_preparing": "正在準備你的音樂資料夾……",
+    "status_ready": "準備就緒。",
+    "status_no_ffmpeg": "缺少 ffmpeg：請按「下載 ffmpeg」。",
+    "status_copying": "正在複製……",
+    "status_importing": "正在匯入……",
+    "status_importing_folder": "正在匯入 {folder}……",
+    "status_writing": "正在寫入音樂庫……",
+    "status_podcast_download": "{show} – {episode}：正在下載 {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}：正在下載 {done} MB",
+    "status_podcast_convert": "{show} – {episode}：正在轉換 {percent}%",
+    "status_stopped": "已停止。",
+    "status_added": "已加入檔案：{count}",
+    "status_nothing_new": "沒有新內容可加入。",
+    "status_done": "完成。音樂庫中的曲目：{tracks}",
+    "error_generic": "發生錯誤，這不是你的操作造成的。請在以下網址回報：\n{url}\n並附上視窗中的文字（選取後按 Ctrl+C）。",
+    "error_stopped": "匯入已停止。原因見視窗中的文字。",
+    "close_running": "匯入尚未完成。仍要關閉嗎？\n你可以稍後再次執行。",
+    "addon_not_found": "無法自動找到插件 {addon}。\n\n請選擇它的資料夾：\n{path}",
+    "addon_folder_title": "插件 {addon} 的資料夾",
+    "ffmpeg_ask": "需要 ffmpeg，這是一個免費程式，用來轉換你的音樂並讀取標題和封面。這台電腦上還沒有它。\n\n"
+                  "現在下載嗎？（約 110 MB，來自 github.com/GyanD/codexffmpeg）\n\n它會放在 {folder}\n"
+                  "電腦上的其他內容都不會改變：要移除它，刪除該資料夾即可。",
+    "ffmpeg_other_os": "需要 ffmpeg，這是一個用來轉換音樂的免費程式。\n\nmacOS：安裝 Homebrew（brew.sh），然後執行  "
+                       "brew install ffmpeg\nLinux：安裝 ffmpeg 套件（sudo apt install ffmpeg）",
+    "ffmpeg_downloading": "正在下載 ffmpeg：{done} / {total} MB",
+    "ffmpeg_failed": "無法下載 ffmpeg（原因見視窗中的文字）。\n\n請檢查網路連線，然後按「下載 ffmpeg」重試，"
+                     "或自行安裝：開啟開始功能表，輸入 cmd，開啟「命令提示字元」並執行\n    winget install Gyan.FFmpeg",
+    "filetype_music": "音樂檔案",
+    "filetype_all": "所有檔案",
+    "add_files_title": "選擇要加入的音樂檔案",
+    "add_folder_title": "選擇要加入的音樂資料夾",
+    "bad_folder": "請選擇一個有音樂的資料夾，不能在插件的音樂資料夾內（也不能是整個磁碟）。",
+    "files_added_ask": "已加入音樂資料夾的檔案：{count}\n\n現在匯入嗎？",
+    "already_there": "這些曲目已經在你的音樂資料夾中。",
+    "library_title": "選擇你的音樂庫",
+    "library_is_addon": "這是插件自己的音樂資料夾：請選擇你存放音樂的資料夾。",
+    "covers_title": "包含原始檔案的資料夾（資料夾和檔名與音樂資料夾中相同）",
+    "copy_confirm": "你的音樂庫中的新曲目：{count}\n\n複製到插件並匯入嗎？清單見視窗。",
+    "done": "完成！音樂庫中的曲目：{tracks}",
+    "done_converted": "已轉換：{count}",
+    "done_copied": "從你的音樂庫複製：{count}",
+    "done_warnings": "警告：{count}（見視窗）。",
+    "done_restart": "請完全重新啟動遊戲以聽到新曲目（/reload 不夠）。\n在遊戲中，/kzz lib 開啟音樂庫，你可以在那裡建立播放清單。",
+    "crash": "發生錯誤：\n\n{text}\n\n請在 {url} 回報",
+}
+
+STRINGS["jaJP"] = {
+    "title": "Kalimdor ZugZug Radio - 音楽のインポート",
+    "heading": "Kalimdor ZugZug Radio に自分の音楽を追加",
+    "steps": "1. 音楽を追加します。   2.「インポート」を押します。   3. ゲームを再起動します。",
+    "music_frame": "あなたの音楽",
+    "music_hint": "mp3、m4a、flac、ogg、wav など。フォルダごと追加することもできます（例：アルバムごとに1つ）。",
+    "music_count": "音楽フォルダの曲数：{tracks}",
+    "music_count_convert": "音楽フォルダの曲数：{tracks}（変換が必要：{convert}）",
+    "add_files": "ファイルを追加...",
+    "add_folder": "フォルダを追加...",
+    "open_music": "音楽フォルダを開く",
+    "library_frame": "任意：音楽ライブラリと同期",
+    "library_hint": "曲を追加し続けているフォルダ（iTunes、Plex、ミュージックなど）があれば選んでください。"
+                    "インポートのたびに、アドオンにまだない曲がコピーされます。そのフォルダは読み取るだけで、"
+                    "変更されることはありません。",
+    "not_set": "未設定",
+    "choose": "選択...",
+    "remove": "解除",
+    "options_frame": "オプション",
+    "opt_rename": "ラテン文字以外の名前のファイルを変更する（推奨：ゲームで再生できない場合があります）",
+    "opt_keep": "変換後も元のファイルを残す（残さない場合は削除されます：コピーなので問題ありません）",
+    "covers_from": "見つからないジャケットの復元元：",
+    "covers_library": "音楽ライブラリ",
+    "podcasts_frame": "ポッドキャスト",
+    "podcasts_hint": "インポートのたびにポッドキャストの最新エピソードがダウンロードされます。ゲーム内では"
+                     "前回の続きから再生されます。",
+    "podcasts_download": "インポート時に新しいエピソードをダウンロード",
+    "col_podcast": "ポッドキャスト",
+    "col_keep": "エピソード数",
+    "podcast_add": "追加...",
+    "podcast_edit": "編集...",
+    "podcast_edit_title": "ポッドキャストの設定",
+    "podcast_mode_latest": "最新のエピソードを残す",
+    "podcast_mode_order": "選んだエピソードから順番に聴く",
+    "podcast_pick_title": "どこから始めるか",
+    "podcast_pick_prompt": "最初に聴くエピソードを選んでください。以降のエピソードは順番に続きます。インポートのたびに、聴き終えたエピソードは削除され、次のエピソードがダウンロードされます。アドオンの進行状況が保存されるよう、ゲームを終了してからインポートしてください。",
+    "col_from": "開始",
+    "from_latest": "最新",
+    "podcast_add_title": "ポッドキャストを追加",
+    "podcast_add_prompt": "ポッドキャストのアドレス（RSS フィードまたは Apple Podcasts のページ）を貼り付けてください。",
+    "podcast_keep_label": "残すエピソード数：",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "podcast_checking": "ポッドキャストを確認しています...",
+    "podcast_added": "ポッドキャストを追加しました：{name}",
+    "podcast_bad": "このポッドキャストを読み込めませんでした：\n{error}\n\nアドレスを確認して、もう一度お試しください。",
+    "podcast_dup": "このポッドキャストはすでにリストにあります。",
+    "podcast_remove_ask": "{name} をリストから削除しますか？",
+    "podcast_delete_ask": "ダウンロード済みの {name} のエピソードも削除しますか？",
+    "import_note": "大きなライブラリの変換や、ポッドキャストのダウンロードと変換には時間がかかることがあります（特に初回）。ゲームを起動する前に行ってください。新しい音楽はゲームを再起動しないと表示されず、聴き終えたエピソードはログアウト時に保存されます。",
+    "import": "インポート",
+    "download_ffmpeg": "ffmpeg をダウンロード",
+    "status_looking": "アドオンを探しています...",
+    "status_preparing": "音楽フォルダを準備しています...",
+    "status_ready": "準備完了。",
+    "status_no_ffmpeg": "ffmpeg がありません：「ffmpeg をダウンロード」を押してください。",
+    "status_copying": "コピーしています...",
+    "status_importing": "インポートしています...",
+    "status_importing_folder": "{folder} をインポートしています...",
+    "status_writing": "ライブラリを書き込んでいます...",
+    "status_podcast_download": "{show} – {episode}：ダウンロード中 {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}：ダウンロード中 {done} MB",
+    "status_podcast_convert": "{show} – {episode}：変換中 {percent}%",
+    "status_stopped": "停止しました。",
+    "status_added": "追加したファイル：{count}",
+    "status_nothing_new": "追加するものはありません。",
+    "status_done": "完了。ライブラリの曲数：{tracks}",
+    "error_generic": "問題が発生しました。あなたの操作のせいではありません。こちらで報告してください：\n{url}\n"
+                     "ウィンドウの文字も添えてください（選択して Ctrl+C）。",
+    "error_stopped": "インポートが停止しました。理由はウィンドウに表示されています。",
+    "close_running": "インポートはまだ終わっていません。それでも閉じますか？\nあとでもう一度実行できます。",
+    "addon_not_found": "アドオン {addon} が自動的に見つかりませんでした。\n\nフォルダを選んでください：\n{path}",
+    "addon_folder_title": "アドオン {addon} のフォルダ",
+    "ffmpeg_ask": "ffmpeg が必要です。音楽を変換し、曲名やジャケットを読み取る無料のプログラムです。"
+                  "このPCにはまだありません。\n\n今すぐダウンロードしますか？（約 110 MB、github.com/GyanD/codexffmpeg から）"
+                  "\n\n保存先：{folder}\nPCのほかの部分は変更されません。削除するには、そのフォルダを削除してください。",
+    "ffmpeg_other_os": "ffmpeg が必要です。音楽を変換する無料のプログラムです。\n\nmacOS：Homebrew（brew.sh）を"
+                       "インストールして  brew install ffmpeg  を実行\nLinux：ffmpeg パッケージをインストール"
+                       "（sudo apt install ffmpeg）",
+    "ffmpeg_downloading": "ffmpeg をダウンロード中：{done} / {total} MB",
+    "ffmpeg_failed": "ffmpeg をダウンロードできませんでした（理由はウィンドウに表示されています）。\n\n"
+                     "インターネット接続を確認して「ffmpeg をダウンロード」を押すか、自分でインストールしてください："
+                     "スタートメニューで cmd と入力し、「コマンド プロンプト」を開いて次を実行\n    winget install Gyan.FFmpeg",
+    "filetype_music": "音楽ファイル",
+    "filetype_all": "すべてのファイル",
+    "add_files_title": "追加する音楽ファイルを選択",
+    "add_folder_title": "追加する音楽フォルダを選択",
+    "bad_folder": "アドオンの音楽フォルダの外にある、音楽の入ったフォルダを選んでください（ドライブ全体は不可）。",
+    "files_added_ask": "音楽フォルダに追加したファイル：{count}\n\n今すぐインポートしますか？",
+    "already_there": "これらの曲はすでに音楽フォルダにあります。",
+    "library_title": "音楽ライブラリを選択",
+    "library_is_addon": "それはアドオン自身の音楽フォルダです。音楽を保存しているフォルダを選んでください。",
+    "covers_title": "元のファイルがあるフォルダ（音楽フォルダと同じフォルダ名・ファイル名）",
+    "copy_confirm": "音楽ライブラリの新しい曲：{count}\n\nアドオンにコピーしてインポートしますか？一覧はウィンドウにあります。",
+    "done": "完了！ライブラリの曲数：{tracks}",
+    "done_converted": "変換：{count}",
+    "done_copied": "音楽ライブラリからコピー：{count}",
+    "done_warnings": "警告：{count}（ウィンドウを参照）。",
+    "done_restart": "新しい曲を聴くには、ゲームを完全に再起動してください（/reload では不十分です）。\n"
+                    "ゲーム内で /kzz lib を入力するとライブラリが開き、プレイリストを作れます。",
+    "crash": "問題が発生しました：\n\n{text}\n\n{url} で報告してください",
+}
+
+STRINGS["koKR"] = {
+    "title": "Kalimdor ZugZug Radio - 음악 가져오기",
+    "heading": "Kalimdor ZugZug Radio에 내 음악 추가",
+    "steps": "1. 음악을 추가합니다.   2. '가져오기'를 누릅니다.   3. 게임을 다시 시작합니다.",
+    "music_frame": "내 음악",
+    "music_hint": "mp3, m4a, flac, ogg, wav 등. 폴더째 추가해도 됩니다(예: 앨범마다 하나씩).",
+    "music_count": "음악 폴더의 곡 수: {tracks}",
+    "music_count_convert": "음악 폴더의 곡 수: {tracks} (변환 필요: {convert})",
+    "add_files": "파일 추가...",
+    "add_folder": "폴더 추가...",
+    "open_music": "음악 폴더 열기",
+    "library_frame": "선택 사항: 내 음악 라이브러리와 동기화",
+    "library_hint": "계속 곡을 추가하는 폴더(iTunes, Plex, 음악 등)가 있다면 선택하세요. 가져올 때마다 애드온에 "
+                    "아직 없는 곡이 복사됩니다. 그 폴더는 읽기만 하고 절대 변경하지 않습니다.",
+    "not_set": "설정 안 됨",
+    "choose": "선택...",
+    "remove": "해제",
+    "options_frame": "옵션",
+    "opt_rename": "라틴 문자가 아닌 이름의 파일 이름 바꾸기(권장: 게임에서 재생되지 않을 수 있음)",
+    "opt_keep": "변환 후 원본 파일 유지(유지하지 않으면 삭제됩니다: 복사본입니다)",
+    "covers_from": "누락된 커버를 복구할 위치:",
+    "covers_library": "내 음악 라이브러리",
+    "podcasts_frame": "팟캐스트",
+    "podcasts_hint": "가져올 때마다 팟캐스트의 최신 에피소드를 내려받습니다. 게임에서는 멈춘 곳부터 이어서 재생됩니다.",
+    "podcasts_download": "가져올 때 새 에피소드 내려받기",
+    "col_podcast": "팟캐스트",
+    "col_keep": "에피소드",
+    "podcast_add": "추가...",
+    "podcast_edit": "편집...",
+    "podcast_edit_title": "팟캐스트 설정",
+    "podcast_mode_latest": "최신 에피소드 유지",
+    "podcast_mode_order": "선택한 에피소드부터 순서대로 듣기",
+    "podcast_pick_title": "시작할 위치",
+    "podcast_pick_prompt": "처음 들을 에피소드를 선택하세요. 이후 에피소드는 순서대로 이어집니다. 가져올 때마다 다 들은 에피소드는 삭제되고 다음 에피소드를 내려받습니다. 애드온의 진행 상황이 저장되도록 게임을 종료한 뒤 가져오세요.",
+    "col_from": "시작",
+    "from_latest": "최신",
+    "podcast_add_title": "팟캐스트 추가",
+    "podcast_add_prompt": "팟캐스트 주소(RSS 피드 또는 Apple Podcasts 페이지)를 붙여 넣으세요.",
+    "podcast_keep_label": "유지할 에피소드 수:",
+    "ok": "확인",
+    "cancel": "취소",
+    "podcast_checking": "팟캐스트 확인 중...",
+    "podcast_added": "팟캐스트 추가됨: {name}",
+    "podcast_bad": "이 팟캐스트를 읽을 수 없습니다:\n{error}\n\n주소를 확인하고 다시 시도하세요.",
+    "podcast_dup": "이 팟캐스트는 이미 목록에 있습니다.",
+    "podcast_remove_ask": "{name}을(를) 목록에서 제거할까요?",
+    "podcast_delete_ask": "이미 내려받은 {name} 에피소드도 삭제할까요?",
+    "import_note": "큰 라이브러리를 변환하거나 팟캐스트를 내려받아 변환하는 데는 시간이 걸릴 수 있습니다(특히 처음에는). 게임을 시작하기 전에 하세요. 새 음악은 게임을 다시 시작해야 보이고, 다 들은 에피소드는 로그아웃할 때 저장됩니다.",
+    "import": "가져오기",
+    "download_ffmpeg": "ffmpeg 내려받기",
+    "status_looking": "애드온을 찾는 중...",
+    "status_preparing": "음악 폴더 준비 중...",
+    "status_ready": "준비 완료.",
+    "status_no_ffmpeg": "ffmpeg가 없습니다: 'ffmpeg 내려받기'를 누르세요.",
+    "status_copying": "복사 중...",
+    "status_importing": "가져오는 중...",
+    "status_importing_folder": "{folder} 가져오는 중...",
+    "status_writing": "라이브러리 작성 중...",
+    "status_podcast_download": "{show} – {episode}: 내려받는 중 {done} / {total} MB",
+    "status_podcast_download_nosize": "{show} – {episode}: 내려받는 중 {done} MB",
+    "status_podcast_convert": "{show} – {episode}: 변환 중 {percent}%",
+    "status_stopped": "중지됨.",
+    "status_added": "추가된 파일: {count}",
+    "status_nothing_new": "새로 추가할 것이 없습니다.",
+    "status_done": "완료. 라이브러리의 곡 수: {tracks}",
+    "error_generic": "문제가 발생했습니다. 사용자의 잘못이 아닙니다. 다음 주소로 알려 주세요:\n{url}\n"
+                     "창의 텍스트도 함께 보내 주세요(선택한 뒤 Ctrl+C).",
+    "error_stopped": "가져오기가 중지되었습니다. 이유는 창에 표시되어 있습니다.",
+    "close_running": "가져오기가 아직 끝나지 않았습니다. 그래도 닫을까요?\n나중에 다시 실행할 수 있습니다.",
+    "addon_not_found": "{addon} 애드온을 자동으로 찾지 못했습니다.\n\n폴더를 선택하세요:\n{path}",
+    "addon_folder_title": "{addon} 애드온 폴더",
+    "ffmpeg_ask": "ffmpeg가 필요합니다. 음악을 변환하고 제목과 커버를 읽는 무료 프로그램입니다. 이 PC에는 아직 "
+                  "없습니다.\n\n지금 내려받을까요? (약 110 MB, github.com/GyanD/codexffmpeg에서)\n\n저장 위치: {folder}\n"
+                  "PC의 다른 부분은 바뀌지 않습니다. 제거하려면 그 폴더를 삭제하세요.",
+    "ffmpeg_other_os": "ffmpeg가 필요합니다. 음악을 변환하는 무료 프로그램입니다.\n\nmacOS: Homebrew(brew.sh)를 "
+                       "설치한 뒤  brew install ffmpeg  실행\nLinux: ffmpeg 패키지 설치(sudo apt install ffmpeg)",
+    "ffmpeg_downloading": "ffmpeg 내려받는 중: {done} / {total} MB",
+    "ffmpeg_failed": "ffmpeg를 내려받지 못했습니다(이유는 창에 표시되어 있습니다).\n\n인터넷 연결을 확인하고 "
+                     "'ffmpeg 내려받기'를 눌러 다시 시도하거나 직접 설치하세요: 시작 메뉴에서 cmd를 입력하고 "
+                     "'명령 프롬프트'를 연 뒤 다음을 실행\n    winget install Gyan.FFmpeg",
+    "filetype_music": "음악 파일",
+    "filetype_all": "모든 파일",
+    "add_files_title": "추가할 음악 파일 선택",
+    "add_folder_title": "추가할 음악 폴더 선택",
+    "bad_folder": "애드온의 음악 폴더 밖에 있는, 음악이 든 폴더를 선택하세요(드라이브 전체는 안 됩니다).",
+    "files_added_ask": "음악 폴더에 추가된 파일: {count}\n\n지금 가져올까요?",
+    "already_there": "이 곡들은 이미 음악 폴더에 있습니다.",
+    "library_title": "내 음악 라이브러리 선택",
+    "library_is_addon": "그것은 애드온 자체의 음악 폴더입니다. 음악을 보관하는 폴더를 선택하세요.",
+    "covers_title": "원본 파일이 있는 폴더(음악 폴더와 같은 폴더 이름과 파일 이름)",
+    "copy_confirm": "음악 라이브러리의 새 곡: {count}\n\n애드온으로 복사해서 가져올까요? 목록은 창에 있습니다.",
+    "done": "완료! 라이브러리의 곡 수: {tracks}",
+    "done_converted": "변환됨: {count}",
+    "done_copied": "음악 라이브러리에서 복사됨: {count}",
+    "done_warnings": "경고: {count}(창 참고).",
+    "done_restart": "새 곡을 들으려면 게임을 완전히 다시 시작하세요(/reload로는 부족합니다).\n게임에서 /kzz lib을 "
+                    "입력하면 라이브러리가 열리고, 거기서 재생 목록을 만들 수 있습니다.",
+    "crash": "문제가 발생했습니다:\n\n{text}\n\n{url} 으로 알려 주세요",
+}
+
+# Windows language (as returned by locale.windows_locale) -> addon language
+_PREFIX = {"en": "enUS", "fr": "frFR", "de": "deDE", "es": "esES", "pt": "ptBR", "it": "itIT", "ru": "ruRU",
+           "ja": "jaJP", "ko": "koKR"}
+_LATAM = {"MX", "AR", "CO", "CL", "PE", "VE", "EC", "GT", "CU", "BO", "DO", "HN", "PY", "SV", "NI", "CR", "PA",
+          "UY", "PR", "US"}
+
+
+def _from_os_name(name: str) -> str | None:
+    """'it_IT' / 'zh_TW' / 'es_MX' -> addon language code."""
+    if not name:
+        return None
+    lang, _, region = name.replace("-", "_").partition("_")
+    region = region[:2].upper()
+    if lang == "zh":
+        return "zhTW" if region in ("TW", "HK", "MO") else "zhCN"
+    if lang == "es" and region in _LATAM:
+        return "esMX"
+    return _PREFIX.get(lang)
+
+
+def windows_language() -> str | None:
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            return _from_os_name(locale.windows_locale.get(lcid, ""))
+        return _from_os_name((locale.getlocale()[0] or os.environ.get("LANG", "")).split(".")[0])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _flavor_dir(addon_dir: Path) -> Path:
+    return addon_dir.parent.parent.parent  # <flavor>/Interface/AddOns/KalimdorZugZugRadio
+
+
+def saved_language(addon_dir: Path) -> str | None:
+    """KZZR_DB.lang from the most recent SavedVariables of the addon (only top-level keys)."""
+    files = glob.glob(str(_flavor_dir(addon_dir) / "WTF" / "Account" / "*" / "SavedVariables" /
+                          "KalimdorZugZugRadio.lua"))
+    if not files:
+        return None
+    newest = max(files, key=os.path.getmtime)
+    depth = 0
+    try:
+        with open(newest, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                s = line.strip()
+                if depth == 1:
+                    m = re.match(r'\["lang"\]\s*=\s*"(\w+)"', s)
+                    if m:
+                        return m.group(1)
+                if s.endswith("{"):
+                    depth += 1
+                elif s.startswith("}"):
+                    depth -= 1
+    except OSError:
+        return None
+    return None
+
+
+def client_language(addon_dir: Path) -> str | None:
+    """textLocale of the game client (WTF/Config.wtf)."""
+    try:
+        text = (_flavor_dir(addon_dir) / "WTF" / "Config.wtf").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = re.search(r'^SET textLocale "(\w+)"', text, re.M)
+    return m.group(1) if m else None
+
+
+def detect_language(addon_dir: Path | None) -> str:
+    candidates = []
+    if addon_dir:
+        candidates += [saved_language(addon_dir), client_language(addon_dir)]
+    candidates.append(windows_language())
+    for lang in candidates:
+        if lang == "enGB":
+            lang = "enUS"
+        if lang in STRINGS:
+            return lang
+    return "enUS"
+
+
+class Texts:
+    """T("key", name=value): the text in the chosen language, falling back to English."""
+
+    def __init__(self, lang: str = "enUS"):
+        self.lang = lang if lang in STRINGS else "enUS"
+
+    def __call__(self, key: str, **values) -> str:
+        text = STRINGS[self.lang].get(key) or STRINGS["enUS"][key]
+        return text.format(**values) if values else text

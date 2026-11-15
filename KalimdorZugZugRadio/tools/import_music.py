@@ -15,7 +15,8 @@ Usage:  python import_music.py [--addon FOLDER] [--keep-originals] [--keep-names
 The addon folder is found automatically: the folder you run the script from, then the
 addon installed in World of Warcraft on this PC (Windows registry and usual locations,
 WoW Forever first). If it isn't found, pass it with --addon "path/to/KalimdorZugZugRadio".
-Requires ffmpeg and ffprobe (on PATH or installed with winget Gyan.FFmpeg).
+Requires ffmpeg and ffprobe (on PATH or installed with winget Gyan.FFmpeg). If they are missing,
+on Windows the script offers to download them into %LOCALAPPDATA%/KalimdorZugZugRadio/ffmpeg.
 """
 from __future__ import annotations
 
@@ -220,27 +221,140 @@ IMAGE_EXT = [".jpg", ".jpeg", ".png", ".webp"]
 COVER_SIZE = 256
 
 
-def find_tool(name: str) -> str:
+# ffmpeg: found on PATH, in the folder setup_ffmpeg() downloads it to, or where winget put it.
+# Set by setup_ffmpeg() in main().
+FFMPEG = FFPROBE = ""
+LOCAL_FFMPEG_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ADDON_NAME / "ffmpeg"
+# Gyan's Windows builds (the ones winget's Gyan.FFmpeg installs), published on GitHub with a sha256
+FFMPEG_RELEASE_API = "https://api.github.com/repos/GyanD/codexffmpeg/releases/latest"
+FFMPEG_ASSET_SUFFIX = "-essentials_build.zip"
+FFMPEG_MAX_BYTES = 500 * 1024 * 1024
+
+
+def find_tool(name: str) -> str | None:
     found = shutil.which(name)
     if found:
         return found
+    local = LOCAL_FFMPEG_DIR / (name + ".exe" if os.name == "nt" else name)
+    if local.is_file():
+        return str(local)
     pattern = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages",
                            "Gyan.FFmpeg*", "**", "bin", f"{name}.exe")
     matches = sorted(glob.glob(pattern, recursive=True))
-    if matches:
-        return matches[-1]
-    sys.exit(f"ERROR: {name} not found. Install ffmpeg (winget install Gyan.FFmpeg).")
+    return matches[-1] if matches else None
+
+
+def print_ffmpeg_help() -> None:
+    print(" You can also install ffmpeg yourself:")
+    if os.name == "nt":
+        print("   open the Start menu, type cmd, open \"Command Prompt\" and run:  winget install Gyan.FFmpeg")
+        print("   then run this script again.")
+    elif sys.platform == "darwin":
+        print("   install Homebrew (https://brew.sh), then run in Terminal:  brew install ffmpeg")
+    else:
+        print("   with your package manager, for example:  sudo apt install ffmpeg")
+
+
+def download_ffmpeg(progress=None) -> bool:
+    """Downloads Gyan's ffmpeg build from GitHub into LOCAL_FFMPEG_DIR (only ffmpeg.exe and
+    ffprobe.exe are kept). Checks the sha256 GitHub publishes for the file. Windows only.
+    progress(bytes_done, bytes_total) replaces the printed progress (used by the window)."""
+    import urllib.request
+    import zipfile
+    try:
+        info = json.loads(http_get(FFMPEG_RELEASE_API) or b"{}")
+        asset = next((a for a in info.get("assets", []) if a.get("name", "").endswith(FFMPEG_ASSET_SUFFIX)), None)
+        if not asset:
+            raise RuntimeError("no ffmpeg download found in the latest release")
+        url = asset.get("browser_download_url", "")
+        if not url.startswith("https://github.com/"):
+            raise RuntimeError(f"unexpected download address: {url[:80]}")
+        total = int(asset.get("size") or 0)
+        if total > FFMPEG_MAX_BYTES:
+            raise RuntimeError("the download is too large")
+        LOCAL_FFMPEG_DIR.mkdir(parents=True, exist_ok=True)
+        part = LOCAL_FFMPEG_DIR / "download.zip.part"
+        digest = hashlib.sha256()
+        written = 0
+        print(f" Downloading {asset['name']} ({total / 1048576:.0f} MB)...")
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as f:
+            while chunk := r.read(1024 * 256):
+                written += len(chunk)
+                if written > FFMPEG_MAX_BYTES:
+                    raise RuntimeError("the download is too large")
+                digest.update(chunk)
+                f.write(chunk)
+                if progress:
+                    progress(written, total)
+                elif total:
+                    print(f"\r   {written / 1048576:5.0f} / {total / 1048576:.0f} MB  ({written * 100 // total}%)",
+                          end="", flush=True)
+        print()
+        expected = str(asset.get("digest") or "")
+        if expected.startswith("sha256:") and digest.hexdigest() != expected[7:].lower():
+            raise RuntimeError("the downloaded file is damaged (checksum mismatch), try again")
+        print(" Extracting...")
+        with zipfile.ZipFile(part) as z:
+            for exe in ("ffmpeg.exe", "ffprobe.exe"):
+                member = next((m for m in z.namelist() if m.endswith("/bin/" + exe)), None)
+                if not member:
+                    raise RuntimeError(f"{exe} is not in the download")
+                tmp = LOCAL_FFMPEG_DIR / (exe + ".part")
+                with z.open(member) as src, open(tmp, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                os.replace(tmp, LOCAL_FFMPEG_DIR / exe)
+        part.unlink()
+        return True
+    except (OSError, ValueError, RuntimeError, zipfile.BadZipFile) as exc:
+        print(f"\n ERROR: ffmpeg could not be downloaded ({exc}).")
+        for leftover in LOCAL_FFMPEG_DIR.glob("*.part"):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+        return False
+
+
+def setup_ffmpeg() -> None:
+    """Finds ffmpeg/ffprobe; if they are missing, offers to download them (Windows) or explains how
+    to install them, and exits if they still aren't there."""
+    global FFMPEG, FFPROBE
+    FFMPEG, FFPROBE = find_tool("ffmpeg") or "", find_tool("ffprobe") or ""
+    if FFMPEG and FFPROBE:
+        return
+    print("=" * 72)
+    print(" ffmpeg is needed")
+    print("=" * 72)
+    print(" This script uses ffmpeg, a free program, to convert your music and read its titles and")
+    print(" covers. It is not installed on this PC yet.\n")
+    if os.name == "nt":
+        print(" It can be downloaded now (about 110 MB, from github.com/GyanD/codexffmpeg) into")
+        print(f"   {LOCAL_FFMPEG_DIR}")
+        print(" Nothing else on your PC is changed: to remove it, just delete that folder.\n")
+        if ask(" Download ffmpeg now? Press Enter for yes, or type N for no: ").lower() in ("", "y", "yes"):
+            print()
+            if download_ffmpeg():
+                FFMPEG, FFPROBE = find_tool("ffmpeg") or "", find_tool("ffprobe") or ""
+                if FFMPEG and FFPROBE:
+                    print(" ffmpeg is ready.\n")
+                    return
+        print()
+    print_ffmpeg_help()
+    sys.exit(1)
 
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-FFMPEG = find_tool("ffmpeg")
-FFPROBE = find_tool("ffprobe")
+
+# ffmpeg/ffprobe never get a console window of their own: started from the window (pythonw, no
+# console), Windows would otherwise flash a new terminal for every file.
+NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
 def run(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
 
 
 def probe(path: Path) -> dict:
@@ -364,6 +478,71 @@ COVER_INDEX_NAME = "_index.json"
 cover_index: dict[str, dict] = {}  # key (track path or "folder:<dir>") -> {"cover", "mtime"}
 seen_cover_keys: set[str] = set()
 
+# What ffprobe said about each playable track, so a rerun doesn't probe ~2000 unchanged files again:
+# music/_probe_cache.json, track id -> {"stamp": [size, mtime], "info": slim probe, "genre"}.
+# A changed size or mtime (or a renamed file) probes again; tracks not seen in a run are dropped.
+PROBE_CACHE_NAME = "_probe_cache.json"
+probe_cache: dict[str, dict] = {}
+probe_cache_seen: dict[str, dict] = {}
+
+
+def load_probe_cache() -> None:
+    global probe_cache
+    probe_cache_seen.clear()
+    try:
+        probe_cache = json.loads((MUSIC_DIR / PROBE_CACHE_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        probe_cache = {}
+
+
+def save_probe_cache() -> None:
+    try:
+        (MUSIC_DIR / PROBE_CACHE_NAME).write_text(json.dumps(probe_cache_seen, ensure_ascii=False),
+                                                  encoding="utf-8")
+    except OSError as exc:
+        print(f"  WARNING: {PROBE_CACHE_NAME} not saved ({exc})")
+
+
+def slim_info(info: dict) -> dict:
+    """Only what tags_of/duration_of/attached_pic_index read."""
+    streams = []
+    for s in info.get("streams", []):
+        keep = {"index": s.get("index"), "codec_type": s.get("codec_type"), "duration": s.get("duration"),
+                "disposition": {"attached_pic": (s.get("disposition") or {}).get("attached_pic", 0)}}
+        if s.get("codec_type") == "audio":
+            keep["tags"] = s.get("tags") or {}
+        streams.append(keep)
+    fmt = info.get("format", {})
+    return {"format": {"duration": fmt.get("duration"), "tags": fmt.get("tags") or {}}, "streams": streams}
+
+
+def cached_probe(path: Path, rel: str) -> tuple[dict, str]:
+    """(probe info, genre) of a playable track, from the cache when the file hasn't changed."""
+    st = path.stat()
+    stamp = [st.st_size, st.st_mtime]
+    entry = probe_cache.get(rel)
+    if not (entry and entry.get("stamp") == stamp and "info" in entry):
+        info = slim_info(probe(path))
+        entry = {"stamp": stamp, "info": info, "genre": genre_of(path, tags_of(info))}
+    probe_cache_seen[rel] = entry
+    return entry["info"], entry.get("genre", "")
+
+
+def cached_original(rel: str, src: Path, field: str, compute):
+    """compute(src) for the original of track rel in the music library (genre, cover stream), cached
+    in the track's probe-cache entry while the original's size and mtime don't change."""
+    st = src.stat()
+    stamp = [st.st_size, st.st_mtime]
+    entry = probe_cache_seen.get(rel)
+    if entry is None:
+        return compute(src)
+    saved = entry.get(field)
+    if saved and saved.get("stamp") == stamp:
+        return saved.get("value")
+    value = compute(src)
+    entry[field] = {"stamp": stamp, "value": value}
+    return value
+
 
 def load_cover_index() -> None:
     path = COVERS_DIR / COVER_INDEX_NAME
@@ -384,7 +563,7 @@ def render_cover(src: Path, stream_index: int | None = None) -> str | None:
     if stream_index is not None:
         args += ["-map", f"0:{stream_index}"]
     args += ["-frames:v", "1", "-vf", COVER_FILTER, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
-    res = subprocess.run(args, capture_output=True)
+    res = subprocess.run(args, capture_output=True, **NO_WINDOW)
     if res.returncode != 0 or len(res.stdout) != COVER_SIZE * COVER_SIZE * 3:
         return None
     name = hashlib.sha1(res.stdout).hexdigest()[:16] + ".png"
@@ -392,7 +571,7 @@ def render_cover(src: Path, stream_index: int | None = None) -> str | None:
     if not dst.exists():
         subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
                         "-s", f"{COVER_SIZE}x{COVER_SIZE}", "-i", "-", "-frames:v", "1", str(dst)],
-                       input=res.stdout, capture_output=True)
+                       input=res.stdout, capture_output=True, **NO_WINDOW)
     return name if dst.exists() else None
 
 
@@ -573,7 +752,7 @@ EPISODE_FILE = "episode.json"
 PART_SECONDS = 150
 DEFAULT_KEEP = 3
 USER_AGENT = "KalimdorZugZugRadio/1.0 (+https://github.com/MikeAymeric/KalimdorZugZugRadio)"
-PODCASTS_TEMPLATE = """# Kalimdor ZugZug Radio - podcasts to download with: python import_music.py --podcasts
+PODCASTS_TEMPLATE = """# Kalimdor ZugZug Radio - podcasts that Import music.py downloads (save this file, then import)
 # One podcast per line: the RSS feed URL (or the Apple Podcasts link) and, optionally,
 # how many recent episodes to keep (default 3). Lines starting with # are ignored.
 #
@@ -586,7 +765,7 @@ MAX_PAGE_BYTES = 50 * 1024 * 1024        # feeds and API answers
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024  # one episode or cover
 
 
-def http_get(url: str, dst: Path | None = None, timeout: int = 60) -> bytes | None:
+def http_get(url: str, dst: Path | None = None, timeout: int = 60, progress=None) -> bytes | None:
     """Downloads a web page (returned) or a file (saved to dst). Only http(s): a feed must not be able
     to make the script read local files (file://) or other protocols. Sizes are capped, so a broken or
     hostile server can't fill the disk."""
@@ -603,12 +782,18 @@ def http_get(url: str, dst: Path | None = None, timeout: int = 60) -> bytes | No
                 raise RuntimeError("the answer is too large")
             return data
         written = 0
+        try:
+            total = int(r.headers.get("Content-Length") or 0)
+        except ValueError:
+            total = 0
         with open(dst, "wb") as f:
             while chunk := r.read(1024 * 256):
                 written += len(chunk)
                 if written > limit:
                     raise RuntimeError("the file is too large")
                 f.write(chunk)
+                if progress:
+                    progress(written, total)  # progress(bytes_done, bytes_total or 0)
     return None
 
 
@@ -664,7 +849,9 @@ def show_dir_name(show: str) -> str:
     return clean[:80]
 
 
-def read_podcast_list(path: Path) -> list[tuple[str, int]]:
+def read_podcast_list(path: Path) -> list[tuple[str, int, str | None]]:
+    """(url, episodes to keep, start) per podcast. start = "<date>:<key>" of the first episode not
+    listened yet when the podcast is listened in order ("from:" on its line), else None (the latest)."""
     entries = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -672,22 +859,103 @@ def read_podcast_list(path: Path) -> list[tuple[str, int]]:
             continue
         parts = line.split()
         keep = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else DEFAULT_KEEP
-        entries.append((parts[0], max(1, keep)))
+        start = next((p[5:] for p in parts[1:] if p.startswith("from:") and len(p) > 5), None)
+        entries.append((parts[0], max(1, keep), start))
     return entries
 
 
-def split_episode(src: Path, out_dir: Path) -> int:
-    """Converts to OGG and splits into PART_SECONDS-second parts; returns the number of parts."""
+def write_podcast_list(path: Path, entries: list[tuple[str, int, str | None]]) -> None:
+    """Rewrites podcasts.txt: the explanation, then one podcast per line."""
+    lines = [line for line in PODCASTS_TEMPLATE.splitlines() if line.startswith("#") and "example.com" not in line
+             and "apple.com/us/podcast/name" not in line]
+    lines += [f"{url} {keep}" + (f" from:{start}" if start else "") for url, keep, start in entries]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def episode_key(feed_url: str, guid: str) -> str:
+    """Id of an episode: its folder name, its id in the game ("ep:<key>") and in podcasts.txt."""
+    return hashlib.sha1((feed_url + "|" + guid).encode("utf-8")).hexdigest()[:12]
+
+
+def read_podcast(url: str) -> tuple[str, list[dict]]:
+    """A podcast's title and episodes (newest first, each with its "key"), also from an Apple Podcasts
+    link. Raises if the address doesn't give a usable feed."""
+    feed_url = resolve_feed(url)
+    show, _, episodes = parse_feed(http_get(feed_url))
+    if not episodes:
+        raise RuntimeError("no episodes found at this address")
+    for ep in episodes:
+        ep["key"] = episode_key(feed_url, ep["guid"])
+    return show, episodes
+
+
+def check_podcast(url: str) -> tuple[str, int]:
+    show, episodes = read_podcast(url)
+    return show, len(episodes)
+
+
+def finished_episodes() -> set[str]:
+    """Keys of the episodes the addon marked as listened to the end (podcastProgress[...].done in the
+    newest SavedVariables of the addon; the game writes them on logout or /reload)."""
+    flavor = ADDON_DIR.parent.parent.parent  # <flavor>/Interface/AddOns/KalimdorZugZugRadio
+    files = glob.glob(str(flavor / "WTF" / "Account" / "*" / "SavedVariables" / f"{ADDON_NAME}.lua"))
+    if not files:
+        return set()
+    try:
+        text = Path(max(files, key=os.path.getmtime)).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return {m.group(1) for m in re.finditer(r'\["ep:([0-9a-f]{12})"\]\s*=\s*\{([^{}]*)\}', text)
+            if re.search(r'\["done"\]\s*=\s*true', m.group(2))}
+
+
+def plan_in_order(episodes: list[dict], start: str, keep: int, finished: set[str]) -> tuple[list[dict], str]:
+    """Episodes to have on disk for a podcast listened in order, and the new start marker: from the
+    start episode (or, if the feed dropped it, the first one published on or after its date), skipping
+    the finished ones, the next `keep` in publishing order. The marker moves past finished episodes."""
+    date, _, key = start.partition(":")
+    chrono = list(reversed(episodes))  # oldest first
+    i = next((n for n, ep in enumerate(chrono) if ep["key"] == key), None)
+    if i is None:
+        i = next((n for n, ep in enumerate(chrono) if ep["date"] >= date), len(chrono))
+    while i < len(chrono) - 1 and chrono[i]["key"] in finished:
+        i += 1
+    if not chrono:
+        return [], start
+    first = chrono[min(i, len(chrono) - 1)]
+    wanted = [ep for ep in chrono[i:] if ep["key"] not in finished][:keep]
+    return wanted, f"{first['date']}:{first['key']}"
+
+
+def split_episode(src: Path, out_dir: Path, progress=None) -> int:
+    """Converts to OGG and splits into PART_SECONDS-second parts; returns the number of parts.
+    progress(seconds_done, seconds_total) follows ffmpeg's -progress output."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    res = run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-map", "0:a:0", "-vn",
-               "-c:a", "libvorbis", "-q:a", "3", "-f", "segment", "-segment_time", str(PART_SECONDS),
-               "-reset_timestamps", "1", str(out_dir / "part_%03d.ogg")])
-    if res.returncode != 0:
-        raise RuntimeError(res.stderr.strip() or "conversion failed")
+    total = 0.0
+    if progress:
+        try:
+            total = duration_of(probe(src))
+        except Exception:  # noqa: BLE001 - no progress then, the split still runs
+            total = 0.0
+    proc = subprocess.Popen(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", str(src),
+         "-map", "0:a:0", "-vn", "-c:a", "libvorbis", "-q:a", "3", "-f", "segment", "-segment_time",
+         str(PART_SECONDS), "-reset_timestamps", "1", str(out_dir / "part_%03d.ogg")],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
+    for line in proc.stdout:  # key=value lines; only errors go to stderr (-loglevel error), so no deadlock
+        if progress and total and line.startswith("out_time_us="):
+            try:
+                progress(min(int(line[12:]) / 1e6, total), total)
+            except ValueError:  # "N/A" at the start
+                pass
+    err = proc.stderr.read()
+    if proc.wait() != 0:
+        raise RuntimeError(err.strip() or "conversion failed")
     return len(list(out_dir.glob("part_*.ogg")))
 
 
-PODCASTS_FILE_NAMES = ("podcasts.txt", "podcast.txt")  # the singular is accepted too
+PODCASTS_FILE_NAMES = ("podcasts.txt", "podcast.txt")
+IN_ORDER_FILE = "_in_order"  # in a show's folder: listened in order (Library.lua serial = true)  # the singular is accepted too
 
 
 def find_podcasts_file() -> Path | None:
@@ -697,7 +965,71 @@ def find_podcasts_file() -> Path | None:
     return None
 
 
-def update_podcasts(stats: dict) -> None:
+class ConsolePodcastProgress:
+    """Download and conversion progress (they run at the same time) on one console line."""
+
+    def __init__(self):
+        self.parts: dict[tuple[str, str], str] = {}  # (stage, episode) -> text
+        self.lock = __import__("threading").Lock()
+
+    def __call__(self, stage: str, show: str, title: str, done: float, total: float) -> None:
+        with self.lock:
+            if stage.endswith("_end"):
+                self.parts.pop((stage[:-4], title), None)
+            elif stage == "download":
+                self.parts[(stage, title)] = "downloading " + f"{done / 1048576:.0f}" + (
+                    f" / {total / 1048576:.0f} MB" if total else " MB")
+            else:
+                self.parts[(stage, title)] = f"converting {int(done * 100 / total) if total else 0}%"
+            line = "  |  ".join(t for (st, _), t in sorted(self.parts.items(), key=lambda i: i[0][0] != "download"))
+            print(f"\r    {line}".ljust(60) + ("" if line else "\r"), end="", flush=True)
+
+
+CONVERTERS = max(1, min(3, (os.cpu_count() or 2) // 2))  # episodes converted at the same time
+_stats_lock = __import__("threading").Lock()
+
+
+def convert_episode(job: dict, stats: dict, progress=None) -> None:
+    """Second half of an episode's download, run by the converter thread while the next one downloads:
+    split into OGG parts, move into place, write episode.json (last: it marks the episode complete)."""
+    ep, show, tmp_dir, ep_dir = job["ep"], job["show"], job["tmp_dir"], job["ep_dir"]
+    try:
+        parts = split_episode(tmp_dir / "episode.bin", tmp_dir / "parts",
+                              progress and (lambda d, t: progress("split", show, ep["title"], d, t)))
+        shutil.rmtree(ep_dir, ignore_errors=True)
+        shutil.move(str(tmp_dir / "parts"), str(ep_dir))
+        (ep_dir / EPISODE_FILE).write_text(json.dumps(
+            {"key": ep["key"], "guid": ep["guid"], "title": ep["title"], "show": show, "date": ep["date"],
+             "feed": job["feed_url"]}, ensure_ascii=False, indent=1), encoding="utf-8")
+        with _stats_lock:
+            stats["podcast_new"] += 1
+        print(f"  ready: {ep['date']} {ep['title']} ({parts} parts of {PART_SECONDS // 60}:{PART_SECONDS % 60:02d})")
+    except Exception as exc:  # noqa: BLE001
+        stats["warnings"].append(f"podcast {show} / {ep['title']}: {exc}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if progress:
+            progress("split_end", show, ep["title"], 0, 0)
+
+
+def update_podcasts(stats: dict, progress=None) -> None:
+    """progress(stage, show, episode_title, done, total): "download" (bytes) and "split" (seconds),
+    then "download_end"/"split_end". Episodes convert in other threads while the next one downloads;
+    ffmpeg's Vorbis encoder uses one core, so up to CONVERTERS episodes convert at once. Downloads wait
+    when one more episode than that is already on disk, so big files don't pile up."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+    converter = ThreadPoolExecutor(max_workers=CONVERTERS)
+    pending = []
+    try:
+        _update_podcasts(stats, progress, converter, pending)
+    finally:
+        wait(pending)
+        converter.shutdown()
+        print()
+
+
+def _update_podcasts(stats: dict, progress, converter, pending: list) -> None:
+    from concurrent.futures import FIRST_COMPLETED, wait
     podcasts_file = find_podcasts_file()
     if not podcasts_file:
         podcasts_file = DATA_DIR / PODCASTS_FILE_NAMES[0]
@@ -709,16 +1041,31 @@ def update_podcasts(stats: dict) -> None:
         print(f"No podcasts in {podcasts_file.name}.\n")
         return
     root = MUSIC_DIR / PODCAST_DIR_NAME
-    for url, keep in entries:
+    finished = finished_episodes() if any(start for _, _, start in entries) else set()
+    new_entries = list(entries)
+    for n, (url, keep, start) in enumerate(entries):
         try:
             feed_url = resolve_feed(url)
             show, image_url, episodes = parse_feed(http_get(feed_url))
         except Exception as exc:  # noqa: BLE001
             stats["warnings"].append(f"podcast {url}: {exc}")
             continue
+        for ep in episodes:
+            ep["key"] = episode_key(feed_url, ep["guid"])
         show_dir = root / show_dir_name(show)
         show_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[podcast] {show}: latest {keep} episodes")
+        in_order = show_dir / IN_ORDER_FILE
+        if start and episodes:
+            selected, marker = plan_in_order(episodes, start, keep, finished)
+            if marker != start:
+                new_entries[n] = (url, keep, marker)
+            in_order.write_text(marker + "\n", encoding="utf-8")
+            print(f"[podcast] {show}: in order, {keep} episodes from {marker.partition(':')[0]}")
+        else:
+            selected = episodes[:keep]
+            if in_order.exists():
+                in_order.unlink()
+            print(f"[podcast] {show}: latest {keep} episodes")
         has_own_cover = any((show_dir / f"cover{ext}").exists() for ext in IMAGE_EXT)
         if image_url and not has_own_cover:
             ext = os.path.splitext(image_url.split("?")[0])[1].lower()
@@ -728,43 +1075,43 @@ def update_podcasts(stats: dict) -> None:
                 stats["warnings"].append(f"podcast {show}: cover not downloaded ({exc})")
 
         wanted = set()
-        for ep in episodes[:keep]:
-            key = hashlib.sha1((feed_url + "|" + ep["guid"]).encode("utf-8")).hexdigest()[:12]
+        for ep in selected:
+            key = ep["key"]
             wanted.add(key)
             ep_dir = show_dir / f"{ep['date']} {key}"
             if (ep_dir / EPISODE_FILE).exists():
                 continue
+            # CONVERTERS converting and one downloaded waiting at most
+            while len([f for f in pending if not f.done()]) > CONVERTERS:
+                wait(pending, return_when=FIRST_COMPLETED)
             print(f"  downloading {ep['date']} {ep['title']}")
             tmp_dir = show_dir / f"_tmp_{key}"
             shutil.rmtree(tmp_dir, ignore_errors=True)
             tmp_dir.mkdir()
             try:
-                audio = tmp_dir / "episode.bin"
-                http_get(ep["url"], audio, timeout=300)
-                parts = split_episode(audio, tmp_dir / "parts")
-                shutil.rmtree(ep_dir, ignore_errors=True)
-                shutil.move(str(tmp_dir / "parts"), str(ep_dir))
-                # episode.json last: marks the episode as complete
-                (ep_dir / EPISODE_FILE).write_text(json.dumps(
-                    {"key": key, "guid": ep["guid"], "title": ep["title"], "show": show, "date": ep["date"],
-                     "feed": feed_url}, ensure_ascii=False, indent=1), encoding="utf-8")
-                stats["podcast_new"] += 1
-                print(f"    {parts} parts of {PART_SECONDS // 60}:{PART_SECONDS % 60:02d}")
+                http_get(ep["url"], tmp_dir / "episode.bin", timeout=300,
+                         progress=progress and (lambda d, t: progress("download", show, ep["title"], d, t)))
             except Exception as exc:  # noqa: BLE001
                 stats["warnings"].append(f"podcast {show} / {ep['title']}: {exc}")
-            finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
+                continue
+            finally:
+                if progress:
+                    progress("download_end", show, ep["title"], 0, 0)
+            job = {"ep": ep, "show": show, "tmp_dir": tmp_dir, "ep_dir": ep_dir, "feed_url": feed_url}
+            pending.append(converter.submit(convert_episode, job, stats, progress))
 
-        # episodes older than the ones to keep are deleted (not when the feed came back empty:
-        # a server error page must not wipe the downloaded episodes)
-        for d in (show_dir.iterdir() if wanted else ()):
+        # episodes older than the ones to keep (or, listening in order, finished) are deleted; not when
+        # the feed came back empty: a server error page must not wipe the downloaded episodes
+        for d in (show_dir.iterdir() if episodes else ()):
             meta = d / EPISODE_FILE
             if d.is_dir() and meta.exists():
                 if json.loads(meta.read_text(encoding="utf-8")).get("key") not in wanted:
                     shutil.rmtree(d)
                     stats["podcast_removed"] += 1
                     print(f"  deleting old episode {d.name}")
-    print()
+    if new_entries != entries:  # in-order podcasts moved on past the finished episodes
+        write_podcast_list(podcasts_file, new_entries)
 
 
 def process_episode(folder: Path, stats: dict) -> list[dict]:
@@ -774,9 +1121,10 @@ def process_episode(folder: Path, stats: dict) -> list[dict]:
     cover_src = folder_cover(folder)
     cover = cover_for(f"folder:{cover_src.parent.relative_to(MUSIC_DIR).as_posix()}", cover_src) if cover_src else None
     tracks = []
+    serial = (folder.parent / IN_ORDER_FILE).exists()
     for i, path in enumerate(parts, 1):
         try:
-            duration = duration_of(probe(path))
+            duration = duration_of(cached_probe(path, wow_path(path))[0])
         except Exception as exc:  # noqa: BLE001
             stats["warnings"].append(f"{folder.name}/{path.name}: {exc}")
             continue
@@ -784,7 +1132,7 @@ def process_episode(folder: Path, stats: dict) -> list[dict]:
             "file": wow_path(path), "folder": f"{PODCAST_DIR_NAME}/{meta['show']}",
             "title": meta["title"], "artist": meta["show"], "album": meta["date"], "duration": duration,
             "cover": wow_path(COVERS_DIR / cover) if cover else None,
-            "episode": meta["key"], "part": i, "parts": len(parts),
+            "episode": meta["key"], "part": i, "parts": len(parts), "serial": serial,
         })
     return tracks
 
@@ -833,14 +1181,14 @@ def process_folder(folder: Path, keep_originals: bool, stats: dict) -> list[dict
 
     tracks = []
     for path in sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in NATIVE):
+        rel = wow_path(path)
         try:
-            info = probe(path)
+            info, genre = cached_probe(path, rel)
         except Exception as exc:  # noqa: BLE001
             stats["warnings"].append(f"{label}/{path.name}: {exc}")
             continue
         tags = tags_of(info)
         g_artist, g_title = guess_from_filename(original_names.get(path.stem, path.stem))
-        rel = wow_path(path)
 
         pic = attached_pic_index(info)
         cover = cover_for(rel, path, pic) if pic is not None else cached_cover(rel)
@@ -861,7 +1209,7 @@ def process_folder(folder: Path, keep_originals: bool, stats: dict) -> list[dict
             "album": tags.get("album", ""),
             "duration": duration,
             "cover": wow_path(COVERS_DIR / cover) if cover else None,
-            "genre": genre_of(path, tags),
+            "genre": genre,
             "year": year_of(tags),
             "composer": (tags.get("composer") or "").strip(),
             "track": number_of(tags.get("track")),
@@ -907,7 +1255,7 @@ def recover_genres(tracks: list[dict], finder: OriginalFinder) -> int:
             continue
         src = finder.find(t["file"])
         if src and src.suffix.lower() in MP4_EXT:
-            g = mp4_genre(src)
+            g = cached_original(t["file"], src, "orig_genre", mp4_genre)
             if g and g != t.get("genre"):
                 t["genre"] = g
                 fixed += 1
@@ -927,7 +1275,7 @@ def recover_covers(tracks: list[dict], source_root: Path, stats: dict, finder: O
         cover = None
         try:
             if src:
-                pic = attached_pic_index(probe(src))
+                pic = cached_original(t["file"], src, "orig_pic", lambda p: attached_pic_index(probe(p)))
                 if pic is not None:
                     cover = cover_for(t["file"], src, pic)
             if not cover and folder.is_dir():
@@ -965,6 +1313,8 @@ def write_library(tracks: list[dict]) -> None:
                 fields.append(f"{key} = {int(t[key])}")
         if t.get("episode"):
             fields += [f"episode = {lua_str(t['episode'])}", f"part = {t['part']}", f"parts = {t['parts']}"]
+            if t.get("serial"):
+                fields.append("serial = true")
         lines.append("    { " + ", ".join(fields) + " },")
     lines += ["  },", "}", ""]
     LIBRARY_FILE.write_text("\n".join(lines), encoding="utf-8")
@@ -1176,7 +1526,7 @@ def interactive_menu(args: argparse.Namespace) -> bool:
             print(f" Unknown choice: {choice}\n")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--keep-names", action="store_true",
                         help="don't rename files and folders with non-Latin characters (Japanese, accents, ...)")
@@ -1198,8 +1548,36 @@ def main() -> None:
                         help=f"addon folder (the one with {ADDON_NAME}.toc), if it isn't found automatically")
     parser.add_argument("--no-menu", action="store_true",
                         help="don't show the interactive menu (it appears when the script starts with no options)")
-    args = parser.parse_args()
-    interactive = len(sys.argv) == 1 and sys.stdin is not None and sys.stdin.isatty()
+    parser.add_argument("--menu", action="store_true",
+                        help="show the text menu instead of the window (Import music.py opens a window)")
+    return parser
+
+
+def new_stats() -> dict:
+    return {"converted": 0, "renamed": 0, "deleted": 0, "copied": 0, "moved": 0, "podcast_new": 0,
+            "podcast_removed": 0, "warnings": []}
+
+
+def prepare_addon(addon: Path, stats: dict) -> None:
+    """Points the script at an addon folder: creates the data addon, moves old files there and loads
+    the name map. Shared by the command line, the text menu and the window (import_gui.py)."""
+    set_addon_dir(addon)
+    ensure_data_addon()
+    migrate_to_data_addon(stats)
+    # migration from the Italian file/folder names used by versions <= 0.4
+    legacy_names = MUSIC_DIR / LEGACY_NAMES_FILE_NAME
+    if legacy_names.exists() and not (MUSIC_DIR / NAMES_FILE_NAME).exists():
+        legacy_names.rename(MUSIC_DIR / NAMES_FILE_NAME)
+    legacy_originals = MUSIC_DIR / "_originali"
+    if legacy_originals.is_dir() and not ORIGINALS_DIR.exists():
+        legacy_originals.rename(ORIGINALS_DIR)
+    load_original_names()
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    interactive = (len(sys.argv) == 1 or args.menu) and sys.stdin is not None and sys.stdin.isatty()
+    setup_ffmpeg()
 
     addon = find_addon_dir(args.addon)
     while not addon and interactive:
@@ -1212,19 +1590,8 @@ def main() -> None:
         sys.exit(f"ERROR: the {ADDON_NAME} addon was not found. Install it in "
                  f"World of Warcraft/_forever_/Interface/AddOns/ first, or pass its folder with "
                  f"--addon \"path\\{ADDON_NAME}\"")
-    set_addon_dir(addon)
-    stats = {"converted": 0, "renamed": 0, "deleted": 0, "copied": 0, "moved": 0, "podcast_new": 0,
-             "podcast_removed": 0, "warnings": []}
-    ensure_data_addon()
-    migrate_to_data_addon(stats)
-    # migration from the Italian file/folder names used by versions <= 0.4
-    legacy_names = MUSIC_DIR / LEGACY_NAMES_FILE_NAME
-    if legacy_names.exists() and not (MUSIC_DIR / NAMES_FILE_NAME).exists():
-        legacy_names.rename(MUSIC_DIR / NAMES_FILE_NAME)
-    legacy_originals = MUSIC_DIR / "_originali"
-    if legacy_originals.is_dir() and not ORIGINALS_DIR.exists():
-        legacy_originals.rename(ORIGINALS_DIR)
-    load_original_names()
+    stats = new_stats()
+    prepare_addon(addon, stats)
     if interactive:
         saved = load_settings().get("library")
         if saved and Path(saved).is_dir():
@@ -1232,7 +1599,16 @@ def main() -> None:
         if not interactive_menu(args):
             print("Nothing done.")
             return
+    confirm = ((lambda n: ask(f" Copy these {n} new tracks into the addon and import them? [Y/n] ").lower()
+                not in ("n", "no", "q")) if interactive else None)
+    run_import(args, stats, confirm)
 
+
+def run_import(args: argparse.Namespace, stats: dict, confirm=None, progress=None, podcast_progress=None) -> dict:
+    """The import itself, after prepare_addon(). confirm(track_count) -> bool is asked before copying from
+    the library (None: yes); progress(done, total, label) is called for each music folder and
+    podcast_progress (see update_podcasts; on a console it defaults to one updating line) while
+    episodes download and convert. Returns a summary for the window."""
     # tracks to copy from the user's library: listed (and confirmed in the menu) before any work
     library = Path(args.library).expanduser() if args.library else None
     missing: list[Path] = []
@@ -1243,7 +1619,7 @@ def main() -> None:
         missing = find_missing(library)
         if missing:
             describe_missing(missing)
-            if interactive and ask(" Copy them into the addon and import them? [Y/n] ").lower() in ("n", "no", "q"):
+            if confirm and not confirm(len(missing)):
                 missing = []
         else:
             print(" Nothing new: music/ already has every track of your library.")
@@ -1254,11 +1630,14 @@ def main() -> None:
     # podcasts: always checked when podcasts.txt exists (unless --no-podcasts); --podcasts creates the template
     do_podcasts = not args.no_podcasts and (args.podcasts or find_podcasts_file() is not None)
     if do_podcasts:
-        update_podcasts(stats)
+        if podcast_progress is None and getattr(sys.stdout, "isatty", lambda: False)():
+            podcast_progress = ConsolePodcastProgress()
+        update_podcasts(stats, podcast_progress)
     if not args.keep_originals and ORIGINALS_DIR.is_dir():
         print(f"  deleting {ORIGINALS_DIR} (use --keep-originals to keep it)")
         shutil.rmtree(ORIGINALS_DIR)
     load_cover_index()
+    load_probe_cache()
     if missing:
         copy_missing(library, missing, stats)
     if not args.keep_names:
@@ -1270,7 +1649,9 @@ def main() -> None:
         folders.append(Path(root))
 
     tracks = []
-    for folder in folders:
+    for i, folder in enumerate(folders):
+        if progress:
+            progress(i, len(folders), folder.relative_to(MUSIC_DIR).as_posix())
         found = process_folder(folder, args.keep_originals, stats)
         if found:
             print(f"[{folder.relative_to(MUSIC_DIR).as_posix()}] {len(found)} tracks")
@@ -1287,7 +1668,10 @@ def main() -> None:
         recovered = recover_covers(tracks, source_root, stats, finder)
         genres_fixed = recover_genres(tracks, finder)
 
+    if progress:
+        progress(len(folders), len(folders), "")
     write_library(tracks)
+    save_probe_cache()
     save_cover_index()
     removed = remove_unused_covers(tracks)
     unique = len({t["cover"] for t in tracks if t["cover"]})
@@ -1322,6 +1706,9 @@ def main() -> None:
     print(f"In the game's AddOns list keep \"Kalimdor ZugZug Radio - My Music\" enabled.")
     print("If you added new files, RESTART the game client; if only Library.lua changed, /reload is enough.")
     print("Playlists are created in-game: /kzz lib")
+    items = sum(1 for t in tracks if not t.get("episode")) + len({t["episode"] for t in tracks if t.get("episode")})
+    return {"tracks": items, "converted": stats["converted"], "copied": stats["copied"],
+            "no_cover": len(missing), "warnings": list(stats["warnings"])}
 
 
 if __name__ == "__main__":

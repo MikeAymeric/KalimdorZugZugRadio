@@ -31,8 +31,8 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 
 - The **WoW Forever** game client.
 - To add your own music or podcasts (optional, the game soundtrack works without it):
-  - [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, tick **"Add python.exe to PATH"** during the installation.
-  - [ffmpeg](https://ffmpeg.org/). On Windows, the easiest way is to open a terminal and run: `winget install Gyan.FFmpeg`
+  - [Python](https://www.python.org/downloads/) (3.8 or newer): download it and install it with the default choices. If the installer shows **"Add python.exe to PATH"**, tick it.
+  - [ffmpeg](https://ffmpeg.org/): nothing to do on Windows. The first time, **Import music.py** offers to download it (about 110 MB, into `%LOCALAPPDATA%\KalimdorZugZugRadio\ffmpeg`; delete that folder to remove it). If you prefer, install it yourself with `winget install Gyan.FFmpeg`. On macOS: `brew install ffmpeg`.
 
 ## Installation
 
@@ -61,14 +61,19 @@ You can already listen to the game soundtrack: open the library (the **Library**
 
 ## Adding your own music
 
-1. Put your music files in your music folder:
+1. In the addon folder (`AddOns\KalimdorZugZugRadio`), double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/)). A window opens. The first time, it offers to download ffmpeg if it is missing.
+2. Press **Add files...** or **Add a folder...** and choose your music. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...). Folders are kept as they are (for example one per album): they only help you organize and search. Your music is copied to
    ```
    World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio_Library\music\
    ```
-   The first time you run **Import music.py** it creates this folder (option 7 of its menu opens it). Files you put in the addon's own `KalimdorZugZugRadio\music` folder are moved there too. You can use subfolders (for example one per album or artist): they only help you organize and search. Formats: anything ffmpeg can read (mp3, ogg, mp4, m4a, flac, wav...).
-2. In the addon folder, double-click **`Import music.py`** (it needs [Python](https://www.python.org/downloads/): tick "Add python.exe to PATH" when installing it). A window opens with a small menu: type the number of an option to change it (your music library, keep the originals, podcasts, recover covers...), then press Enter to start. The window shows the progress; press Enter to close it at the end. If double-clicking opens the file in an editor instead, use the terminal command below.
+   (**Open the music folder** shows it; you can also copy files there yourself). Files you put in the addon's own `KalimdorZugZugRadio\music` folder are moved there too.
+3. Press **Import**. The window shows the progress and tells you when it has finished. Converting a large library, or downloading and converting podcasts, can take a while (especially the first time): do it before starting the game, since new music only appears after a restart and the game saves which episodes you finished when you log out. Your choices (options, music library) are remembered for the next time.
 
-   You can also run the script from a terminal opened in the addon folder and pass the options directly (the menu then doesn't appear; `--help` lists them):
+   The window speaks the language you chose in the addon (or the game's, or Windows'), in all 12 languages of the addon; the detailed log below stays in English.
+
+   If double-clicking opens the file in an editor instead, right-click it and choose *Open with* > *Python*. If your Python has no tkinter (some Linux installations), the script shows a text menu instead (also with `python "Import music.py" --menu`).
+
+   You can also run the script from a terminal opened in the addon folder and pass the options directly (the window then doesn't appear; `--help` lists them):
    ```
    python tools\import_music.py --keep-originals
    ```
@@ -76,30 +81,35 @@ You can already listen to the game soundtrack: open the library (the **Library**
    ```
    python tools\import_music.py --addon "D:\Path\To\World of Warcraft\_forever_\Interface\AddOns\KalimdorZugZugRadio"
    ```
-3. **Restart the game client** (new files are only seen after a restart; if you only removed files, `/reload` is enough).
+4. **Restart the game client** (new files are only seen after a restart; if you only removed files, `/reload` is enough).
 
 What the script does:
 
-- **Conversion**: formats WoW can't play are converted to OGG. After a successful conversion the original file is deleted; add `--keep-originals` to keep the originals in `music\_originals\` instead.
+- **Conversion**: formats WoW can't play are converted to OGG. After a successful conversion the original file (a copy inside the music folder) is deleted; tick *Keep the original files* (or add `--keep-originals`) to keep the originals in `music\_originals\` instead.
 - **Covers**: the cover embedded in each file is used, or a `cover.jpg` / `folder.jpg` in the folder. Identical covers are stored only once. An original whose cover can't be extracted is not deleted. At the end the script lists the folders whose tracks have no cover.
-- **Your music library**: if you keep your music in another folder (for example a Plex or iTunes library), choose it with option 1 of the menu, or pass `--library "D:\path\to\library"`. The script compares it with the `music` folder, lists the tracks that are missing and, after you confirm, copies and converts them. The folder is remembered for the next time and is only read. It only adds: a track you delete from `music` but keep in the library is copied again next time. Missing covers are also recovered from it.
-- **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, run `python tools\import_music.py --covers-from "D:\path\to\originals"`. That folder is only read.
-- **Tags**: title, artist, album, genre, year, composer and track numbers are read from each file. Many store-bought MP4 files keep the genre in a way ffmpeg misreads (a game soundtrack shows up as "Big Band"): the script reads the right genre from the file itself, and for tracks converted by an older version from the originals in your music library (option 1).
-- **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Use `--keep-names` to disable this.
+- **Your music library**: if you keep your music in another folder (for example a Plex or iTunes library), choose it in the window (*Keep in sync with your music library*), or pass `--library "D:\path\to\library"`. The script compares it with the `music` folder, lists the tracks that are missing and, after you confirm, copies and converts them. The folder is remembered for the next time and is only read. It only adds: a track you delete from `music` but keep in the library is copied again next time. Missing covers are also recovered from it.
+- **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, choose that folder in *Recover missing covers from* (or pass `--covers-from "D:\path\to\originals"`). That folder is only read.
+- **Tags**: title, artist, album, genre, year, composer and track numbers are read from each file. Many store-bought MP4 files keep the genre in a way ffmpeg misreads (a game soundtrack shows up as "Big Band"): the script reads the right genre from the file itself, and for tracks converted by an older version from the originals in your music library.
+- **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Untick *Rename files with non-Latin names* (or pass `--keep-names`) to disable this.
 - **Where things go**: the music, `covers`, `Library.lua`, `podcasts.txt` and the script's settings are all in `AddOns\KalimdorZugZugRadio_Library`, a small data addon created by the script, so that addon updates never delete them.
 - Run the script again every time you add or remove music.
 
 ## Podcasts
 
-1. Create a file named **`podcasts.txt`** in your music library folder (`...\AddOns\KalimdorZugZugRadio_Library\podcasts.txt`), or turn on podcasts in the menu of **Import music.py** (or run `python tools\import_music.py --podcasts`) once to create a template.
-2. Add one podcast per line: the RSS feed address or the Apple Podcasts page link, followed by how many recent episodes to keep (3 if omitted):
-   ```
-   https://example.com/feed/my-podcast.xml 3
-   https://podcasts.apple.com/us/podcast/name/id1234567890 2
-   ```
-3. Double-click **`Import music.py`** before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
+1. In the window of **Import music.py**, press **Add...** in the *Podcasts* box and paste the address of the podcast (its RSS feed or its Apple Podcasts page; a link you just copied is pasted for you), with how many episodes to keep, and choose:
+   - **Keep the latest episodes**: the newest ones, for news and weekly shows;
+   - **Listen in order, from an episode I choose**: after reading the feed the window lists its episodes and you pick the first one. The import downloads that one and the next ones in publishing order; at every import the episodes you finished in game are deleted and the following ones downloaded, so you can go through a whole series. Import with the game closed: the game saves which episodes you finished when you log out.
 
-In game the episodes are in the **Podcasts** playlist. WoW can't resume a file halfway, so each episode is split into 2:30 parts: the addon remembers the part you reached (even after logging out) and resumes from there.
+   The window checks the address at once and shows the podcast's name. *Edit...* changes the number or the mode (or the starting episode), *Remove* takes a podcast off the list (and, if you want, deletes its downloaded episodes).
+2. Press **Import** (with *Download new episodes when importing* ticked) before playing: it downloads the new episodes, deletes the older ones and updates the library. Then restart the game client.
+
+The list is saved in `...\AddOns\KalimdorZugZugRadio_Library\podcasts.txt`, which you can also edit by hand: one podcast per line, the address followed by how many episodes to keep (3 if omitted) and, for a podcast listened in order, `from:` and the first episode not finished yet (the window writes it, and the import moves it forward):
+```
+https://example.com/feed/my-podcast.xml 3
+https://podcasts.apple.com/us/podcast/name/id1234567890 2
+```
+
+In game the episodes are in the **Podcasts** playlist, newest first; the episodes of a podcast listened in order stay together, oldest first. WoW can't resume a file halfway, so each episode is split into 2:30 parts: the addon remembers the part you reached (even after logging out) and resumes from there.
 
 - **|<** and **>|** move back and forward by one part (2:30).
 - **|<<** and **>>|** go to the previous and next episode.
@@ -203,8 +213,8 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 - **No sound**: check that *Music* is enabled and not at zero in the game's sound options. The radio uses the Music channel.
 - **The conditions don't change the music**: the player is probably in *Free play* (shown in orange). Choose *Automatic (conditions)* in the player's dropdown or type `/kzz auto`.
 - **New tracks or episodes don't appear**: run the import script again and restart the game client (not just `/reload`).
-- **Your music disappeared after updating from 0.7 or older**: your playlists are safe (the game keeps them in `WTF`). Run **Import music.py** again on the same files, for example choosing your music library with option 1: the tracks get the same ids back and reappear in your playlists. The addon tells you at login when playlists refer to missing tracks.
-- **Genres look wrong** ("Big Band", "Porn Groove" on a soundtrack): run Import music.py again with your music library set (option 1); the right genre is read from the original files.
+- **Your music disappeared after updating from 0.7 or older**: your playlists are safe (the game keeps them in `WTF`). Run **Import music.py** again on the same files, for example choosing your music library in the window: the tracks get the same ids back and reappear in your playlists. The addon tells you at login when playlists refer to missing tracks.
+- **Genres look wrong** ("Big Band", "Porn Groove" on a soundtrack): run Import music.py again with your music library set; the right genre is read from the original files.
 - **A song restarts from the beginning after a fight or after dying**: WoW can't resume a song halfway. Podcasts resume from their current part.
 - **Japanese, Chinese or Korean titles**: they use fonts bundled with the addon (KZZR Sans, and Nanum Gothic for Korean), so they are readable on any client. So are symbols the game font lacks: arrows, stars, hearts, dingbats like ✿ ☀ ⚡ ✨, Greek letters, fullwidth punctuation. Emoji outside the basic plane (😂 🔥) are not supported.
 - **Something looks broken**: type `/kzz debug`, then `/reload`, and include the output when you report the problem.

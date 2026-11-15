@@ -892,6 +892,22 @@ check("user library loaded from the data addon", ns.LIB_ROOT == "Interface\\AddO
   and ns.CoverOf(u) == "Interface\\AddOns\\KalimdorZugZugRadio_Library\\covers\\x.png")
 ns.PlayFrom(ns.ALL, u)
 check("tracks play from the data addon", playing == "Interface\\AddOns\\KalimdorZugZugRadio_Library\\music\\u.ogg")
+-- podcasts listened in order from a chosen episode ("serial"): oldest first, kept together
+do
+  local function ep(key, show, date, serial)
+    return { file = "music\\Podcast\\" .. key .. ".ogg", folder = "Podcast/" .. show, title = key, artist = show,
+             album = date, duration = 100, episode = key, part = 1, parts = 1, serial = serial }
+  end
+  KZZR_UserLibrary = { addon = "KalimdorZugZugRadio_Library", tracks = {
+    ep("s2", "Serie", "2020-01-08", true), ep("n1", "News", "2026-11-01"), ep("s3", "Serie", "2020-01-15", true),
+    ep("n2", "News", "2019-05-01"), ep("s1", "Serie", "2020-01-01", true),
+  } }
+  ns.LoadLibrary()
+  local order = {}
+  for _, e in ipairs(ns.episodes) do order[#order + 1] = e.title end
+  check("serial podcast oldest first, placed by its newest episode", table.concat(order, ",") == "n1,s1,s2,s3,n2")
+  check("serial flag read from the library", ns.episodeById["ep:s1"].serial and not ns.episodeById["ep:n1"].serial)
+end
 KZZR_UserLibrary = nil
 ns.LoadLibrary()
 check("library imported before 0.8: still read from the addon folder",
