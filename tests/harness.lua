@@ -70,6 +70,7 @@ function CreateFrame(_, name) local f = stub(); if name then _G[name] = f end; r
 UIParent = stub(); GameTooltip = stub(); GameTooltip_Hide = function() end
 SettingsPanel = stub(); rawset(SettingsPanel, "_shown", false)
 UISpecialFrames = {}
+WOW_PROJECT_ID = 18 -- WoW Forever
 clientLocale = "enUS"
 function GetLocale() return clientLocale end
 function CreateFont(name) local o = stub(); _G[name] = o; return o end
@@ -1132,6 +1133,18 @@ do
   for _, l in ipairs(ns.DebugLines()) do if l:find("assign:", 1, true) then line = l end end
   check("debug shows a disabled condition", line:find("combat=off", 1, true) ~= nil)
   ns.SetConditionEnabled("combat", true); ns.Assign("town", nil); ns.Assign("zone", zonePl)
+end
+do -- other flavors (Retail): no campfire condition, no WoW Forever soundtrack
+  local keys, forever = {}, {}
+  for _, s in ipairs(ns.SituationsFor(false)) do keys[s.key] = true end
+  for _, s in ipairs(ns.SituationsFor(true)) do forever[s.key] = true end
+  check("Retail: no campfire condition", not keys.campfire and keys.combat and keys.idle
+    and #ns.SituationsFor(false) == #ns.SituationsFor(true) - 1)
+  check("Forever: campfire condition", forever.campfire == true and ns.IS_FOREVER and ns.SITUATION_BY_KEY.campfire ~= nil)
+  check("Retail: Forever tracks hidden, classic ones kept",
+    not ns.GameTrackAvailable({ folder = "WoW Forever/New zones" }, false)
+    and ns.GameTrackAvailable({ folder = "WoW Classic/Zones/Forest" }, false)
+    and ns.GameTrackAvailable({ folder = "WoW Forever/New zones" }, true))
 end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

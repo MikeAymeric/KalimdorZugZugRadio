@@ -88,6 +88,82 @@ local function reportApis()
 end
 
 ---------------------------------------------------------------------------
+-- 1b. Compatibility snapshot (RadioProbeCompat, generated from the addon's code)
+-- Writes RadioProbeDB.compat. The lists include addon-local names, so a single
+-- result means little: compare two clients with tools/probe_diff.py.
+---------------------------------------------------------------------------
+local function compatSnapshot()
+  local C = RadioProbeCompat
+  if not C then out("Compat.lua missing") return end
+  local res = { build = { GetBuildInfo() }, project = WOW_PROJECT_ID,
+                globals = {}, methods = {}, events = {}, templates = {}, frameTypes = {} }
+
+  for _, name in ipairs(C.globals) do
+    if resolve(name) == nil then res.globals[#res.globals + 1] = name end
+  end
+
+  -- one object of every widget kind the addon uses; a method counts as present
+  -- if any of them has it (the lists don't say which widget a method is for)
+  local objects = {}
+  for _, kind in ipairs(C.frameTypes) do
+    local ok, f = pcall(CreateFrame, kind, nil, UIParent)
+    if ok and f then
+      objects[#objects + 1] = f
+      if f.Hide then f:Hide() end
+    else
+      res.frameTypes[#res.frameTypes + 1] = kind
+    end
+  end
+  local host = objects[1]
+  if host then
+    local extra = {
+      function() return host:CreateTexture() end,
+      function() return host:CreateFontString() end,
+      function() return host:CreateAnimationGroup() end,
+      function() return host:CreateAnimationGroup():CreateAnimation("Alpha") end,
+    }
+    for _, make in ipairs(extra) do
+      local ok, o = pcall(make)
+      if ok and o then objects[#objects + 1] = o end
+    end
+  end
+  for _, m in ipairs(C.methods) do
+    local found = false
+    for _, o in ipairs(objects) do
+      local ok, v = pcall(function() return o[m] end)
+      if ok and v ~= nil then found = true break end
+    end
+    if not found then res.methods[#res.methods + 1] = m end
+  end
+
+  local evFrame = CreateFrame("Frame")
+  for _, ev in ipairs(C.events) do
+    if pcall(evFrame.RegisterEvent, evFrame, ev) then
+      pcall(evFrame.UnregisterEvent, evFrame, ev)
+    else
+      res.events[#res.events + 1] = ev
+    end
+  end
+
+  for _, pair in ipairs(C.templates) do
+    local ok, f = pcall(CreateFrame, pair[2], nil, UIParent, pair[1])
+    if ok and f then
+      if f.Hide then f:Hide() end
+    else
+      res.templates[#res.templates + 1] = pair[1] .. " (" .. pair[2] .. ")"
+    end
+  end
+
+  RadioProbeDB = RadioProbeDB or {}
+  RadioProbeDB.compat = res
+  out("Compat: %d/%d names, %d/%d methods, %d/%d events missing; templates missing: %s; frame types missing: %s",
+    #res.globals, #C.globals, #res.methods, #C.methods, #res.events, #C.events,
+    #res.templates == 0 and "none" or table.concat(res.templates, ", "),
+    #res.frameTypes == 0 and "none" or table.concat(res.frameTypes, ", "))
+  out("Saved in RadioProbeDB.compat: /reload, then compare with tools/probe_diff.py")
+end
+
+---------------------------------------------------------------------------
 -- 2. Events: registration + counting
 ---------------------------------------------------------------------------
 local EVENTS = {
@@ -344,7 +420,8 @@ frame:SetScript("OnEvent", function(_, ev, ...)
   if ev == "PLAYER_ENTERING_WORLD" and counts[ev] == 1 then
     reportApis()
     reportEvents()
-    out("Commands: /rprobe report | sound | music | stopmusic | tex | auras | creature | clear")
+    compatSnapshot()
+    out("Commands: /rprobe report | compat | sound | music | stopmusic | tex | auras | creature | clear")
     if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(2, pollState) end
   elseif ev == "PLAYER_REGEN_DISABLED" then
     after(1, combatSnapshot)
@@ -367,6 +444,7 @@ SlashCmdList.RADIOPROBE = function(msg)
   elseif cmd == "music" then testMusic()
   elseif cmd == "stopmusic" then pcall(StopMusic) out("StopMusic called")
   elseif cmd == "tex" then testTextures()
+  elseif cmd == "compat" then compatSnapshot()
   elseif cmd == "auras" then scanAuras()
   elseif cmd == "creature" or cmd == "mob" then creatureScan("manual")
   elseif cmd == "clear" then wipe(log) if RadioProbeDB then RadioProbeDB.creatures = {} end out("Log cleared")

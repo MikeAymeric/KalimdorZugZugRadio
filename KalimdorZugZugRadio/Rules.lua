@@ -44,6 +44,7 @@ local function hasAura(spellId)
 end
 
 local function updateCampfire()
+  if not ns.IS_FOREVER then return end -- the campfire auras exist only on WoW Forever
   local nearby = hasAura(AURA_CAMPFIRE_NEARBY)
   if nearby == nil then return end -- not readable right now: change nothing
   if not nearby then

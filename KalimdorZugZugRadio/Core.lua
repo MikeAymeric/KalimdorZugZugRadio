@@ -9,14 +9,35 @@ ns.ROOT = "Interface\\AddOns\\" .. ADDON .. "\\"
 ns.LIB_ROOT = ns.ROOT
 ns.ALL = "__all" -- virtual playlist with the whole user library
 
+-- Which client: WoW Forever (WOW_PROJECT_ID 18) has things the other flavors (Retail = 1)
+-- don't: the campfire auras and its own soundtrack (GameMusic.lua folders "WoW Forever/...").
+ns.IS_FOREVER = WOW_PROJECT_ID == 18
+
 -- Conditions in priority order: the first active one with an assigned playlist wins.
 -- "idle" is always active: it's the music when no other condition applies.
-ns.SITUATIONS = {
+-- forever = only on WoW Forever.
+local ALL_SITUATIONS = {
   { key = "levelup" }, { key = "boss" }, { key = "elite" }, { key = "pvp" }, { key = "combat" },
-  { key = "dead" }, { key = "flight" }, { key = "fishing" }, { key = "swimming" }, { key = "campfire" },
+  { key = "dead" }, { key = "flight" }, { key = "fishing" }, { key = "swimming" }, { key = "campfire", forever = true },
   { key = "dungeon" }, { key = "mounted" }, { key = "zone" }, { key = "town" }, { key = "night" },
   { key = "idle" },
 }
+
+-- The conditions this client can detect.
+function ns.SituationsFor(forever)
+  local list = {}
+  for _, s in ipairs(ALL_SITUATIONS) do
+    if forever or not s.forever then list[#list + 1] = s end
+  end
+  return list
+end
+
+-- Whether a GameMusic.lua track exists on this client.
+function ns.GameTrackAvailable(g, forever)
+  return forever or not tostring(g.folder or ""):find("^WoW Forever/")
+end
+
+ns.SITUATIONS = ns.SituationsFor(ns.IS_FOREVER)
 ns.SITUATION_BY_KEY, ns.PRIORITY = {}, {}
 for i, s in ipairs(ns.SITUATIONS) do
   ns.SITUATION_BY_KEY[s.key] = s
@@ -304,7 +325,7 @@ function ns.LoadLibrary()
   end)
   for _, g in ipairs(KZZR_GameMusic or {}) do
     local id = "game:" .. tostring(g.fid)
-    if type(g.fid) == "number" and not ns.trackById[id] then
+    if type(g.fid) == "number" and not ns.trackById[id] and ns.GameTrackAvailable(g, ns.IS_FOREVER) then
       indexTrack({ file = id, fid = g.fid, game = true, title = g.title or tostring(g.fid), artist = "World of Warcraft",
         album = "", folder = g.folder, duration = g.duration, icon = g.icon, preset = g.preset },
         ns.gameTracks, ns.gameById)

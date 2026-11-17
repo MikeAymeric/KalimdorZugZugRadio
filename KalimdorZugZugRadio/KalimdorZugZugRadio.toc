@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: Kalimdor ZugZug Radio
 ## Notes: Conditional radio: your playlists for bosses, combat, flights, campfires and more. /kzz
 ## Notes-itIT: Radio condizionale: le tue playlist per boss, combattimento, volo, campfire e altro. /kzz

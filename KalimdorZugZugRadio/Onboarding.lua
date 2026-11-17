@@ -51,7 +51,7 @@ end
 function O.PresetList()
   local list = {}
   for _, key in ipairs(PRESET_KEYS) do
-    local n = #ns.PresetTrackIds(key)
+    local n = ns.SITUATION_BY_KEY[key] and #ns.PresetTrackIds(key) or 0 -- campfire: Forever only
     if n > 0 then list[#list + 1] = { key = key, count = n } end
   end
   return list
