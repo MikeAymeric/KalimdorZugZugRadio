@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+Kalimdor ZugZug Radio now runs on **Retail** too (The War Within / Midnight, 12.1.5), with the same download as WoW Forever.
+
+- **Retail support**: the same addon folder works on WoW Forever and on Retail. Playlists, conditions, the welcome guide, podcasts, your own music and the import window all work the same way. Tested in game on Retail: your music and the game soundtrack, the welcome guide, music for each kind of enemy, dungeons and bosses, flight paths.
+- **The whole Retail soundtrack**: on Retail the library offers about 5,700 more game tracks, from The Burning Crusade to Midnight (Outland, Northrend, Cataclysm, Pandaria, Draenor, Legion, Battle for Azeroth, Shadowlands, Dragonflight, The War Within, Midnight), plus events, pet battles and the main themes. They are sorted by expansion and zone, and the welcome guide's ready-made playlists use them too (combat, dungeon, city, night...). Short jingles are left out.
+- The **Campfire** condition exists only on WoW Forever: Retail has no campfire auras to detect, so it is hidden there.
+- On WoW Forever nothing changes: the expansion tracks are not offered, because that client doesn't have them.
+
 ## 1.4.0
 
 Adding your own music no longer needs a terminal.

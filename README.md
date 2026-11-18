@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://github.com/MikeAymeric/KalimdorZugZugRadio/releases/latest"><img src="https://img.shields.io/github/v/release/MikeAymeric/KalimdorZugZugRadio?label=version&color=ff7f00" alt="Latest version"></a>
   <img src="https://img.shields.io/badge/WoW%20Forever-1.60.1%20(16001)-148eff" alt="WoW Forever 1.60.1, Interface 16001">
+  <img src="https://img.shields.io/badge/Retail-12.1.5%20(120105)-148eff" alt="Retail 12.1.5, Interface 120105">
   <a href="https://github.com/MikeAymeric/KalimdorZugZugRadio/releases"><img src="https://img.shields.io/github/downloads/MikeAymeric/KalimdorZugZugRadio/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/languages-12-2ea44f" alt="12 languages">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/MikeAymeric/KalimdorZugZugRadio" alt="MIT license"></a>
@@ -11,7 +12,7 @@
 
 # Kalimdor ZugZug Radio
 
-A music radio addon for **World of Warcraft Forever**.
+A music radio addon for **World of Warcraft Forever** and **Retail** (Midnight).
 
 It plays **your own playlists** based on what your character is doing: a boss fight, combat, a flight path, sitting at a campfire, fishing, a dungeon, a city, a specific zone, the night. You can also simply pick a playlist and listen, with no conditions at all. Besides your own music it can play the **game's own soundtrack** and your **podcasts**.
 
@@ -20,7 +21,7 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 - **Conditional music**: 16 conditions (boss, elite, combat, flight, campfire, zone, night and more), each with its own playlist and volume, plus playlists for specific zones, dungeons and bosses. Fight music fades out gently after the fight, and every fight starts a new song.
 - **Your music library**: your own files (mp3, ogg, mp4, m4a, flac, wav...) with covers, organized in playlists created in-game, browsable by album, artist and genre.
 - **Smart playlists** that fill themselves by rules (artist, genre, year, plays, favourites...), a **play-next queue** and a **smart shuffle** that plays skipped tracks less often.
-- **Game soundtrack**: about 600 WoW Forever and classic tracks, ready to use, with an in-game icon as the cover, and ready-made playlists for each condition.
+- **Game soundtrack**: about 600 WoW Forever and classic tracks, plus on Retail about 5,700 tracks of every expansion from The Burning Crusade to Midnight, ready to use, with an in-game icon as the cover, and ready-made playlists for each condition.
 - **Welcome guide**: sets everything up in a minute the first time you log in.
 - **Podcasts**: the latest episodes of your favourite podcasts, resumed where you left off.
 - **Player**: cover, title, remaining time, controls, volume, favourites, a compact mode and a classic WoW look.
@@ -29,14 +30,14 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 
 ## Requirements
 
-- The **WoW Forever** game client.
+- The **WoW Forever** or **Retail** game client (one download works on both).
 - To add your own music or podcasts (optional, the game soundtrack works without it):
   - [Python](https://www.python.org/downloads/) (3.8 or newer): download it and install it with the default choices. If the installer shows **"Add python.exe to PATH"**, tick it.
   - [ffmpeg](https://ffmpeg.org/): nothing to do on Windows. The first time, **Import music.py** offers to download it (about 110 MB, into `%LOCALAPPDATA%\KalimdorZugZugRadio\ffmpeg`; delete that folder to remove it). If you prefer, install it yourself with `winget install Gyan.FFmpeg`. On macOS: `brew install ffmpeg`.
 
 ## Installation
 
-**From CurseForge or Wago**: install *Kalimdor ZugZug Radio* with the CurseForge app or the Wago app, choosing WoW Forever as the game version.
+**From CurseForge or Wago**: install *Kalimdor ZugZug Radio* with the CurseForge app or the Wago app, choosing WoW Forever or Retail as the game version.
 
 **Manually**:
 
@@ -46,7 +47,7 @@ It plays **your own playlists** based on what your character is doing: a boss fi
    ```
    World of Warcraft\_forever_\Interface\AddOns\
    ```
-   The result must be `...\Interface\AddOns\KalimdorZugZugRadio\KalimdorZugZugRadio.toc`.
+   On Retail the folder is `World of Warcraft\_retail_\Interface\AddOns\`. The result must be `...\Interface\AddOns\KalimdorZugZugRadio\KalimdorZugZugRadio.toc`.
 4. Start the game. In the character selection screen open **AddOns** and make sure **Kalimdor ZugZug Radio** is enabled.
 
 In game, the player window appears and a drum button is added to the minimap. Type `/kzz` to show or hide the player.
@@ -167,7 +168,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
   | 7 | Flight | On a flight path |
   | 8 | Fishing | While fishing (and between casts) |
   | 9 | Swimming | In the water |
-  | 10 | Campfire | Sitting at a campfire, until you move |
+  | 10 | Campfire | Sitting at a campfire, until you move (WoW Forever only) |
   | 11 | Dungeon | Inside a dungeon or raid. *Specific dungeons* lets you give a dungeon its own playlist |
   | 12 | Mounted (ground) | On a ground mount |
   | 13 | Zone music | In a zone that has its own playlist (assign it while you are in the zone) |
@@ -228,7 +229,7 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 
 ## AI disclosure
 
-This addon was built with the help of an AI coding assistant (Anthropic's Claude, through Claude Code). The idea, the design and every decision about features are mine, and I test each version in game on WoW Forever, reporting bugs back until things work the way I want. Most of the code, the test suite and the translations were written by the AI under my direction, and checked with the automated tests and in-game play.
+This addon was built with the help of an AI coding assistant (Anthropic's Claude, through Claude Code). The idea, the design and every decision about features are mine, and I test each version in game on WoW Forever and Retail, reporting bugs back until things work the way I want. Most of the code, the test suite and the translations were written by the AI under my direction, and checked with the automated tests and in-game play.
 
 The addon ships no AI-generated music, covers or artwork: you play your own music files or the game's official soundtrack. The translations into the 11 languages other than English were machine-generated: if you are a native speaker and spot something odd, please open an issue.
 
