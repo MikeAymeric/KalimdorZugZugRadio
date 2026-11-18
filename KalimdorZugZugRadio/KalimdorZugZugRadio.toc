@@ -25,6 +25,7 @@
 
 Library.lua
 GameMusic.lua
+GameMusicRetail.lua
 Locales.lua
 Core.lua
 Player.lua

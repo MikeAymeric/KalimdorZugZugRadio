@@ -1146,5 +1146,36 @@ do -- other flavors (Retail): no campfire condition, no WoW Forever soundtrack
     and ns.GameTrackAvailable({ folder = "WoW Classic/Zones/Forest" }, false)
     and ns.GameTrackAvailable({ folder = "WoW Forever/New zones" }, true))
 end
+do -- GameMusicRetail.lua: expansion soundtracks, only on Retail (WOW_PROJECT_ID 1)
+  local savedId, savedRetail = WOW_PROJECT_ID, KZZR_GameMusicRetail
+  KZZR_GameMusicRetail = nil
+  assert(load(SRC.GameMusicRetail, "GameMusicRetail"))()
+  check("Retail catalog: skipped on WoW Forever", KZZR_GameMusicRetail == nil)
+  WOW_PROJECT_ID = 1
+  assert(load(SRC.GameMusicRetail, "GameMusicRetail"))()
+  local keys, classic, n, bad, short = {}, {}, 0, {}, 0
+  for _, s in ipairs(ns.SituationsFor(false)) do keys[s.key] = true end
+  local savedGame = KZZR_GameMusic
+  assert(load(SRC.GameMusic, "GameMusic"))()
+  for _, g in ipairs(KZZR_GameMusic) do classic[g.fid] = true end
+  KZZR_GameMusic = savedGame
+  for _, g in ipairs(KZZR_GameMusicRetail or {}) do
+    n = n + 1
+    if not keys[g.preset] or classic[g.fid] then bad[#bad + 1] = g.title end
+    if not (g.duration >= 30) then short = short + 1 end
+  end
+  check("Retail catalog: " .. n .. " tracks, valid presets, none in GameMusic.lua"
+    .. (#bad > 0 and ("; bad: " .. table.concat(bad, ", ", 1, math.min(#bad, 5))) or ""), n > 0 and #bad == 0)
+  check("Retail catalog: no jingles under 30 s", short == 0)
+  -- merged with the classic catalog when the library loads
+  KZZR_GameMusicRetail = { { fid = 4872430, title = "Thaldraszus 1 H", folder = "Dragonflight/Thaldraszus",
+    duration = 114.66, preset = "idle" }, { fid = 53198, title = "dup", folder = "x", duration = 60, preset = "idle" } }
+  ns.LoadLibrary()
+  check("Retail catalog: merged into the game tracks, duplicates ignored", ns.gameById["game:4872430"] ~= nil
+    and ns.gameById["game:53198"].title == "Orgrimmar 01 Zone")
+  WOW_PROJECT_ID, KZZR_GameMusicRetail = savedId, savedRetail
+  ns.LoadLibrary()
+  check("Retail catalog: gone again", ns.gameById["game:4872430"] == nil)
+end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

@@ -323,12 +323,16 @@ function ns.LoadLibrary()
     end
     return a.title < b.title
   end)
-  for _, g in ipairs(KZZR_GameMusic or {}) do
-    local id = "game:" .. tostring(g.fid)
-    if type(g.fid) == "number" and not ns.trackById[id] and ns.GameTrackAvailable(g, ns.IS_FOREVER) then
-      indexTrack({ file = id, fid = g.fid, game = true, title = g.title or tostring(g.fid), artist = "World of Warcraft",
-        album = "", folder = g.folder, duration = g.duration, icon = g.icon, preset = g.preset },
-        ns.gameTracks, ns.gameById)
+  -- KZZR_GameMusicRetail (expansion soundtracks) is only defined on Retail: its file returns early elsewhere.
+  for _, catalog in ipairs({ KZZR_GameMusic or {}, KZZR_GameMusicRetail or {} }) do
+    for _, g in ipairs(catalog) do
+      local id = "game:" .. tostring(g.fid)
+      if type(g.fid) == "number" and not ns.trackById[id] and not ns.gameById[id]
+          and ns.GameTrackAvailable(g, ns.IS_FOREVER) then
+        indexTrack({ file = id, fid = g.fid, game = true, title = g.title or tostring(g.fid),
+          artist = "World of Warcraft", album = "", folder = g.folder, duration = g.duration, icon = g.icon,
+          preset = g.preset }, ns.gameTracks, ns.gameById)
+      end
     end
   end
   table.sort(ns.tracks, byFolderTitle)
