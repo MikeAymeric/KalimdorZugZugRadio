@@ -32,6 +32,14 @@ function geterrorhandler() return function(e) print("LUA ERROR: " .. tostring(e)
 unpack = table.unpack
 local eventFrames = {}
 local stub
+-- A Menu API root: CreateRadio/CreateCheckbox call isSelected, CreateButton returns a nested root.
+function menuRoot()
+  local root = stub()
+  rawset(root, "CreateRadio", function(_, _, isSelected) if isSelected then isSelected() end return menuRoot() end)
+  rawset(root, "CreateCheckbox", function(_, _, isSelected) if isSelected then isSelected() end return menuRoot() end)
+  rawset(root, "CreateButton", function() return menuRoot() end)
+  return root
+end
 stub = function()
   local o = {}
   local mt = {}
@@ -51,7 +59,8 @@ stub = function()
     if k == "GetMinMaxValues" then return function(self) return rawget(self, "_min") or 0, rawget(self, "_max") or 0 end end
     if k == "SetMinMaxValues" then return function(self, a, b) rawset(self, "_min", a); rawset(self, "_max", b) end end
     if k == "SetValue" then return function(self, v) local s = rawget(self, "_OnValueChanged"); if s then s(self, v) end end end
-    if k == "SetupMenu" then return function(self, gen) rawset(self, "_gen", gen) end end
+    -- Like the real client, SetupMenu runs the generator at once and reads the radio/checkbox states.
+    if k == "SetupMenu" then return function(self, gen) rawset(self, "_gen", gen); gen(self, menuRoot()) end end
     if k == "GetPoint" then return function() return "CENTER", nil, "CENTER", 0, 0 end end
     if k == "NumLines" then return function() return 0 end end
     if k == "GetFrameLevel" then return function() return 5 end end
@@ -152,7 +161,7 @@ KZZR_GameMusic = {
 }
 
 local ns = {}
-for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Onboarding", "Minimap", "Banner" }) do
+for _, f in ipairs({ "Locales", "Core", "Player", "Rules", "UI", "LibraryUI", "Settings", "Onboarding", "Minimap", "Banner", "Stats" }) do
   assert(load(SRC[f], f))("KalimdorZugZugRadio", ns)
 end
 local fails = 0
@@ -1176,6 +1185,145 @@ do -- GameMusicRetail.lua: expansion soundtracks, only on Retail (WOW_PROJECT_ID
   WOW_PROJECT_ID, KZZR_GameMusicRetail = savedId, savedRetail
   ns.LoadLibrary()
   check("Retail catalog: gone again", ns.gameById["game:4872430"] == nil)
+end
+-- 1.6: volume normalization (loudness measured by the import, corrected towards the library median)
+do
+  local savedLib, savedMode, savedVol, savedNorm = KZZR_UserLibrary, ns.db.mode, ns.Player:GetVolume(), ns.db.normalize
+  local P = ns.Player
+  KZZR_UserLibrary = { addon = "KalimdorZugZugRadio_Library", tracks = {
+    { file = "music\\loud.ogg", folder = "", title = "Loud", duration = 100, loudness = -8 },
+    { file = "music\\mid.ogg", folder = "", title = "Mid", duration = 100, loudness = -14 },
+    { file = "music\\quiet.ogg", folder = "", title = "Quiet", duration = 100, loudness = -20 },
+    { file = "music\\silent.ogg", folder = "", title = "Silent", duration = 100, loudness = -70 },
+    { file = "music\\plain.ogg", folder = "", title = "Plain", duration = 100 },
+    { file = "music\\Podcast\\p1.ogg", folder = "Podcast/S", title = "Ep", artist = "S", album = "2026-01-01",
+      duration = 100, episode = "p", part = 1, parts = 2, loudness = -17 },
+    { file = "music\\Podcast\\p2.ogg", folder = "Podcast/S", title = "Ep", artist = "S", album = "2026-01-01",
+      duration = 100, episode = "p", part = 2, parts = 2, loudness = -17 },
+  } }
+  ns.LoadLibrary()
+  ns.db.normalize = true
+  local function vol() return tonumber(C_CVar.GetCVar("Sound_MusicVolume")) end
+  local function near(a, b) return a and math.abs(a - b) < 0.005 end
+  check("loudness: reference = median of the music (silence and podcasts left out)", ns.loudnessRef == -14)
+  P:SetVolume(0.5)
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\loud.ogg"])
+  check("loudness: a loud track is turned down", near(vol(), 0.5 * 10 ^ (-6 / 20)))
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\quiet.ogg"])
+  check("loudness: a quiet track is turned up while the volume leaves room", near(vol(), 0.5 * 10 ^ (6 / 20)))
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\plain.ogg"])
+  check("loudness: an unmeasured track plays at the user's volume", near(vol(), 0.5))
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\silent.ogg"])
+  check("loudness: a silent measure is ignored", near(vol(), 0.5))
+  local ep = ns.episodeById["ep:p"]
+  check("loudness: podcast episodes carry it", ep and ep.loudness == -17 and near(ns.TrackGain(ep), 10 ^ (3 / 20)))
+  P:SetVolume(1)
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\quiet.ogg"])
+  check("loudness: never above 100%", near(vol(), 1))
+  ns.PlayFrom(ns.ALL, ns.trackById["music\\loud.ogg"])
+  ns.db.normalize = false
+  P:RefreshTrackGain()
+  check("loudness: switched off, the current track goes back to the user's volume", near(vol(), 1))
+  ns.db.normalize = true
+  P:RefreshTrackGain()
+  check("loudness: switched on again", near(vol(), 10 ^ (-6 / 20)))
+  P:Stop(true)
+  check("loudness: stopped, the zone music plays at the user's volume", near(vol(), 1) and near(P:GetVolume(), 1))
+  check("loudness: in /kzz debug", P:DebugState():find("track 1.00", 1, true) ~= nil)
+  KZZR_UserLibrary, ns.db.normalize = savedLib, savedNorm
+  ns.LoadLibrary()
+  P:SetVolume(savedVol)
+  ns.SetMode(savedMode)
+end
+-- 2.0: star ratings and the listening stats window
+do
+  local savedLib, savedMode, savedDate = KZZR_UserLibrary, ns.db.mode, date
+  local P = ns.Player
+  KZZR_UserLibrary = { addon = "KalimdorZugZugRadio_Library", tracks = {
+    { file = "music\\r1.ogg", folder = "F", title = "One", artist = "Alpha", genre = "Rock", duration = 100 },
+    { file = "music\\r2.ogg", folder = "F", title = "Two", artist = "Alpha", genre = "Rock", duration = 100 },
+    { file = "music\\r3.ogg", folder = "F", title = "Three", artist = "Beta", genre = "Jazz", duration = 100 },
+  } }
+  ns.LoadLibrary()
+  local t1, t2, t3 = ns.trackById["music\\r1.ogg"], ns.trackById["music\\r2.ogg"], ns.trackById["music\\r3.ogg"]
+  wipe(ns.db.ratings)
+  ns.SetRating(t1, 5)
+  ns.SetRating(t2, 1)
+  ns.SetRating(t3, 9) -- clamped
+  check("ratings: stored and clamped to 1-5", ns.GetRating(t1) == 5 and ns.GetRating(t2) == 1 and ns.GetRating(t3) == 5)
+  ns.SetRating(t3, 0)
+  check("ratings: 0 removes the rating", ns.db.ratings[t3.file] == nil and ns.GetRating(t3) == 0)
+  local saveHist, saveStats = ns.db.history, ns.db.stats
+  ns.db.history, ns.db.stats = {}, { [t1.file] = { plays = 1 }, [t2.file] = { plays = 1 }, [t3.file] = { plays = 1 } }
+  local wts = ns.ShuffleWeights({ t1, t2, t3 })
+  check("ratings: 5 stars weigh more, 1 star less, unrated in between", wts[1] > wts[3] and wts[3] > wts[2])
+  ns.db.history, ns.db.stats = saveHist, saveStats
+  local smart = ns.SmartTracks({ match = "all", rules = { { field = "rating", op = "ge", value = "4" } } })
+  check("ratings: smart rule 'rating >= 4'", #smart == 1 and smart[1] == t1)
+  check("ratings: stars text", ns.Stars(3, true) == "\226\152\133\226\152\133\226\152\133\226\152\134\226\152\134"
+    and ns.TextFont(ns.Stars(2)) ~= false)
+  -- listening stats by month, condition and zone
+  wipe(ns.db.listen)
+  date = function() return "2026-10" end
+  ns.RecordListen(t3, 600, { cond = "town", zone = "Orgrimmar" })
+  date = function() return "2026-11" end
+  ns.RecordListen(t1, 300, { cond = "combat", zone = "Durotar" })
+  ns.RecordListen(t2, 120, { cond = "combat", zone = "Durotar" })
+  ns.RecordListen(t1, 60, { cond = "free" })
+  local m = ns.Stats.Summary("month")
+  check("stats: this month only", m.seconds == 480 and m.tracks[1][1] == t1 and m.tracks[1][2] == 360 and #m.tracks == 2)
+  check("stats: artists and genres add up", m.artists[1][1] == "Alpha" and m.artists[1][2] == 480 and m.genres[1][1] == "Rock")
+  check("stats: the track of each condition", m.conds[1][1] == "combat" and m.conds[1][3] == t1
+    and ns.Stats.ConditionLabel("free") == ns.L.STATS_FREE_PLAY)
+  check("stats: zones", m.zones[1][1] == "Durotar" and m.zones[1][2] == 420)
+  local y = ns.Stats.Summary("year")
+  check("stats: this year sums the months", y.seconds == 1080 and y.zones[1][1] == "Orgrimmar")
+  date = function() return "2027-01" end
+  check("stats: a new month starts empty", ns.Stats.Summary("month").seconds == 0)
+  date = function() return "2026-11" end
+  -- the player records what it played, under the condition it started in
+  ns.PlayFrom(ns.ALL, t3)
+  check("stats: the player keeps the context", P.listenCtx and P.listenCtx.cond == "free")
+  advance(30)
+  P:Stop(true)
+  check("stats: played seconds land in the month", (ns.db.listen["2026-11"].t[t3.file] or 0) >= 29)
+  local share = ns.Stats.ShareText("month")
+  check("stats: share text", share:find("One", 1, true) ~= nil and share:find("Kalimdor ZugZug Radio", 1, true) ~= nil)
+  ns.Stats:Toggle(true)
+  check("stats: the window opens", ns.Stats:IsShown())
+  ns.Stats:Toggle(false)
+  KZZR_UserLibrary, date = savedLib, savedDate
+  ns.LoadLibrary()
+  ns.SetMode(savedMode)
+end
+-- 2.0: duplicates removed by the import (Library.lua "aliases"): everything moves to the kept track
+do
+  local savedLib = KZZR_UserLibrary
+  local db = ns.db
+  local saved = { playlists = db.playlists, favorites = db.favorites, ratings = db.ratings, stats = db.stats,
+                  history = db.history, upNext = db.upNext, excluded = db.excluded, listen = db.listen }
+  db.playlists = { Mix = { "music\\gone.ogg", "music\\other.ogg" }, Both = { "music\\gone.ogg", "music\\kept.ogg" } }
+  db.favorites, db.excluded = { ["music\\gone.ogg"] = true }, {}
+  db.ratings = { ["music\\gone.ogg"] = 4, ["music\\kept.ogg"] = 2 }
+  db.stats = { ["music\\gone.ogg"] = { plays = 3, seconds = 300 }, ["music\\kept.ogg"] = { plays = 1, seconds = 100, skips = 1 } }
+  db.history, db.upNext = { "music\\gone.ogg" }, { "music\\gone.ogg" }
+  db.listen = { ["2026-11"] = { s = 10, p = 1, t = { ["music\\gone.ogg"] = 10 }, c = { idle = { s = 10, t = { ["music\\gone.ogg"] = 10 } } }, z = {} } }
+  KZZR_UserLibrary = { addon = "KalimdorZugZugRadio_Library", tracks = {
+    { file = "music\\kept.ogg", folder = "", title = "Kept", duration = 100 },
+    { file = "music\\other.ogg", folder = "", title = "Other", duration = 100 },
+  }, aliases = { ["music\\gone.ogg"] = "music\\kept.ogg", ["music\\nowhere.ogg"] = "music\\missing.ogg" } }
+  ns.LoadLibrary()
+  local moved = ns.ApplyAliases()
+  check("aliases: playlists point to the kept track, no double entry",
+    moved == 2 and db.playlists.Mix[1] == "music\\kept.ogg" and #db.playlists.Both == 1 and db.playlists.Both[1] == "music\\kept.ogg")
+  check("aliases: favourite, best rating and stats follow", db.favorites["music\\kept.ogg"] and not db.favorites["music\\gone.ogg"]
+    and db.ratings["music\\kept.ogg"] == 4 and db.stats["music\\kept.ogg"].plays == 4 and db.stats["music\\gone.ogg"] == nil)
+  check("aliases: history, queue and monthly stats follow", db.history[1] == "music\\kept.ogg" and db.upNext[1] == "music\\kept.ogg"
+    and db.listen["2026-11"].t["music\\kept.ogg"] == 10 and db.listen["2026-11"].c.idle.t["music\\kept.ogg"] == 10)
+  check("aliases: running again changes nothing", ns.ApplyAliases() == 0 and #ns.GetPlaylist("Mix").tracks == 2)
+  for k, v in pairs(saved) do db[k] = v end
+  KZZR_UserLibrary = savedLib
+  ns.LoadLibrary()
 end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

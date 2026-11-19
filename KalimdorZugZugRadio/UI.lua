@@ -173,6 +173,23 @@ local function assignHereMenu(root)
   end
 end
 
+-- Submenu to rate a track: 5..1 stars and "No rating" (getTrack is read when the entry is clicked).
+function ns.RatingMenu(root, label, getTrack)
+  local t = getTrack()
+  local n = ns.GetRating(t)
+  local title = n > 0 and (label .. "  " .. ns.Stars(n)) or label
+  local menu = root:CreateButton(title)
+  ns.StyleMenuItem(menu, ns.TextFont(title))
+  for stars = 5, 1, -1 do
+    local text = ns.Stars(stars, true)
+    ns.StyleMenuItem(menu:CreateRadio(text, function() return ns.GetRating(getTrack()) == stars end,
+      function() ns.SetRating(getTrack(), stars) end), ns.TextFont(text))
+  end
+  ns.StyleMenuItem(menu:CreateRadio(L.RATING_NONE, function() return ns.GetRating(getTrack()) == 0 end,
+    function() ns.SetRating(getTrack(), 0) end))
+  return menu
+end
+
 -- "Up next": the queued tracks (click one to take it out of the queue) and "Clear".
 local function queueMenu(root)
   local queued = ns.QueuedTracks()
@@ -206,8 +223,14 @@ local function setupDropdown()
     end
     assignHereMenu(root)
     queueMenu(root)
+    local t = ns.Player.track
+    if t and not t.podcast then
+      root:CreateDivider()
+      ns.RatingMenu(root, L.RATE_TRACK, function() return t end)
+    end
     root:CreateDivider()
     ns.StyleMenuItem(root:CreateButton(L.MANAGE_LIBRARY, function() ns.LibraryUI:Toggle(true) end))
+    ns.StyleMenuItem(root:CreateButton(L.MENU_STATS, function() ns.Stats:Toggle(true) end))
     ns.StyleMenuItem(root:CreateButton(L.MENU_SETTINGS, function() ns.Settings:Open() end))
   end)
 end
@@ -591,12 +614,24 @@ local function shareDialog()
                       insets = { left = 3, right = 3, top = 3, bottom = 3 } })
     box:SetBackdropColor(0, 0, 0, 0.6)
   end
-  dlg.edit = CreateFrame("EditBox", nil, box)
+  -- the text scrolls: a stats summary is longer than the box
+  local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
+  dlg.edit = CreateFrame("EditBox", nil, ok and scroll or box)
   dlg.edit:SetMultiLine(true)
   dlg.edit:SetAutoFocus(false)
   dlg.edit:SetFontObject(ns.FontObject("ChatFontNormal") or ChatFontNormal)
-  dlg.edit:SetPoint("TOPLEFT", 8, -8)
-  dlg.edit:SetPoint("BOTTOMRIGHT", -8, 8)
+  if ok and scroll and scroll.SetScrollChild then
+    scroll:SetPoint("TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    scroll:SetScrollChild(dlg.edit)
+    dlg.scroll = scroll
+    -- clicking anywhere in the box focuses the text
+    scroll:EnableMouse(true)
+    scroll:SetScript("OnMouseDown", function() dlg.edit:SetFocus() end)
+  else
+    dlg.edit:SetPoint("TOPLEFT", 8, -8)
+    dlg.edit:SetPoint("BOTTOMRIGHT", -8, 8)
+  end
   dlg.edit:SetScript("OnEscapePressed", function() dlg:Hide() end)
   dlg.ok = ns.MakeButton(dlg, L.OK, 90, function() if dlg.onOk then dlg.onOk(dlg.edit:GetText()) end end)
   dlg.ok:SetPoint("BOTTOMRIGHT", -18, 14)
@@ -606,11 +641,17 @@ local function shareDialog()
 end
 
 -- mode "export": text to copy; mode "import": onOk(text) is called with the pasted text.
-function ns.ShowShareDialog(mode, textOrNil, onOk)
+-- title/hint replace the playlist-sharing texts (the stats window shares a summary).
+-- big = a taller window (the stats summary has many lines).
+local SHARE_SIZES = { small = { 460, 220 }, big = { 560, 420 } }
+function ns.ShowShareDialog(mode, textOrNil, onOk, title, hint, big)
   local d = shareDialog()
-  d.title:SetText(mode == "export" and L.EXPORT_TITLE or L.IMPORT_TITLE)
+  local size = SHARE_SIZES[big and "big" or "small"]
+  d:SetSize(size[1], size[2])
+  if d.scroll then d.edit:SetWidth(size[1] - 36 - 36) end
+  d.title:SetText(title or (mode == "export" and L.EXPORT_TITLE or L.IMPORT_TITLE))
   ns.SkinWindow(d, d.title, d.close)
-  d.hint:SetText(mode == "export" and L.TT_EXPORT or L.TT_IMPORT)
+  d.hint:SetText(hint or (mode == "export" and L.TT_EXPORT or L.TT_IMPORT))
   d.edit:SetText(textOrNil or "")
   d.onOk = onOk
   d.ok:SetShown(mode == "import")

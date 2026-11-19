@@ -8,7 +8,8 @@ KalimdorZugZugRadio/music/ folder are moved there.
 Recursively scans KalimdorZugZugRadio_Library/music/ (subfolders are only for organizing:
 playlists are created in-game), converts formats WoW can't play (mp4, m4a, flac,
 wav, ...) to OGG, extracts covers (embedded, or cover.jpg/folder.jpg in the folder)
-as deduplicated 256x256 PNGs and generates KalimdorZugZugRadio_Library/Library.lua.
+as deduplicated 256x256 PNGs, measures each track's loudness (so the addon can even out the
+volume) and generates KalimdorZugZugRadio_Library/Library.lua.
 
 Usage:  python import_music.py [--addon FOLDER] [--keep-originals] [--keep-names] [--podcasts]
         (with no options, in a window, it shows a menu; --help lists every option)
@@ -25,12 +26,14 @@ import unicodedata
 import glob
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -542,6 +545,92 @@ def cached_original(rel: str, src: Path, field: str, compute):
     value = compute(src)
     entry[field] = {"stamp": stamp, "value": value}
     return value
+
+
+# --- Loudness (volume normalization) ------------------------------------------------
+# WoW has one Music volume for everything, so some tracks sound louder than others. The import
+# measures each track's integrated loudness (EBU R128, in LUFS) with ffmpeg's ebur128 filter and
+# writes it to Library.lua ("loudness"); in-game the volume of each track is corrected towards the
+# median of the library (Player.lua). The files are never changed. The value is cached in the
+# track's probe-cache entry, so only new or changed tracks are measured.
+LOUDNESS_RE = re.compile(r"I:\s+(-?\d+(?:\.\d+)?) LUFS")
+# the per-frame lines ("t: 12.3 ... S: -14.2 ...") give the loudness curve, one value per second,
+# used to recognise the same recording under another name (find_duplicates in library_tools.py)
+FRAME_RE = re.compile(r"t:\s*(\d+(?:\.\d+)?)\s.*?S:\s*(-?\d+(?:\.\d+)?)")
+SILENT_LUFS = -60.0  # quieter than this = silence or a broken measure: no correction
+LOUDNESS_WORKERS = max(1, min(6, (os.cpu_count() or 2) - 1))
+
+
+def measure_loudness(path: Path) -> tuple[float | None, list[int]]:
+    """(integrated loudness in LUFS or None if ffmpeg can't measure it, short-term loudness curve:
+    one rounded value per second)."""
+    res = run([FFMPEG, "-hide_banner", "-nostats", "-i", str(path), "-vn", "-sn", "-dn",
+               "-af", "ebur128", "-f", "null", "-"])
+    err = res.stderr or ""
+    found = LOUDNESS_RE.findall(err)
+    if res.returncode != 0 or not found:
+        return None, []
+    curve: list[int] = []
+    for t, short in FRAME_RE.findall(err):
+        if float(t) >= len(curve) + 1:  # the first frame past each whole second
+            curve.append(max(-70, round(float(short))))
+    return float(found[-1]), curve  # the summary comes last
+
+
+def combined_loudness(values: list[tuple[float, float]]) -> float | None:
+    """Loudness of several parts played one after the other: (lufs, seconds) averaged as energy."""
+    usable = [(lufs, sec) for lufs, sec in values if lufs > SILENT_LUFS and sec > 0]
+    total = sum(sec for _, sec in usable)
+    if not total:
+        return None
+    return 10 * math.log10(sum(sec * 10 ** (lufs / 10) for lufs, sec in usable) / total)
+
+
+def add_loudness(tracks: list[dict], stats: dict, measure_new: bool = True, progress=None) -> int:
+    """Sets t["loudness"] on every track, measuring the ones not in the probe cache yet (in parallel;
+    measure_new=False only uses the cache). A podcast episode gets one value for all its parts.
+    Returns how many files were measured."""
+    # the curve came in 2.0: tracks measured by 1.6 are measured again once
+    todo = [t for t in tracks if not t.get("episode")
+            and not {"lufs", "curve"} <= probe_cache_seen.get(t["file"], {"lufs": 0, "curve": 0}).keys()]
+    todo += [t for t in tracks if t.get("episode") and "lufs" not in probe_cache_seen.get(t["file"], {"lufs": 0})]
+    if measure_new and todo:
+        print(f"\nMeasuring the volume of {len(todo)} track{'' if len(todo) == 1 else 's'} "
+              f"(only once; {LOUDNESS_WORKERS} at a time) ...")
+        done = 0
+        with ThreadPoolExecutor(LOUDNESS_WORKERS) as pool:
+            futures = {pool.submit(measure_loudness, DATA_DIR / t["file"].replace("\\", "/")): t for t in todo}
+            for fut in as_completed(futures):
+                t = futures[fut]
+                try:
+                    lufs, curve = fut.result()
+                except Exception:  # noqa: BLE001
+                    lufs, curve = None, []
+                if lufs is None:
+                    stats["warnings"].append(f"{t['file']}: the volume could not be measured")
+                entry = probe_cache_seen[t["file"]]
+                entry["lufs"] = lufs  # None is cached too: not retried every run
+                if not t.get("episode"):
+                    entry["curve"] = curve
+                done += 1
+                if progress:
+                    progress(done, len(todo), t["folder"] or "(music)", "loudness")
+                if done % 100 == 0:
+                    print(f"  {done}/{len(todo)}")
+    episodes: dict[str, list[tuple[float, float]]] = {}
+    for t in tracks:
+        lufs = probe_cache_seen.get(t["file"], {}).get("lufs")
+        if t.get("episode"):
+            if lufs is not None:
+                episodes.setdefault(t["episode"], []).append((lufs, t["duration"]))
+        elif lufs is not None and lufs > SILENT_LUFS:
+            t["loudness"] = round(lufs, 1)
+    for t in tracks:
+        if t.get("episode") and t["episode"] in episodes:
+            lufs = combined_loudness(episodes[t["episode"]])
+            if lufs is not None:
+                t["loudness"] = round(lufs, 1)
+    return len(todo) if measure_new else 0
 
 
 def load_cover_index() -> None:
@@ -1192,7 +1281,7 @@ def process_folder(folder: Path, keep_originals: bool, stats: dict) -> list[dict
 
         pic = attached_pic_index(info)
         cover = cover_for(rel, path, pic) if pic is not None else cached_cover(rel)
-        cover = cover or shared_cover
+        cover = cover or shared_cover or found_cover(rel)
 
         duration = duration_of(info)
         if duration <= 0:
@@ -1290,6 +1379,74 @@ def recover_covers(tracks: list[dict], source_root: Path, stats: dict, finder: O
     return recovered
 
 
+# --- Library tools (2.0, library_tools.py) -------------------------------------------
+# _library.json: the tracks of the last import, read by the duplicate finder and the cover search.
+# _aliases.json: removed duplicate -> kept track id; Library.lua's "aliases" lets the addon move
+#   playlists, favourites, ratings and stats to the kept track.
+# _covers_found/: covers found online or chosen by hand for tracks without one (map.json: track id
+#   -> image file), used when a track has no embedded cover and no cover file in its folder.
+LIBRARY_INDEX_NAME = "_library.json"
+ALIASES_NAME = "_aliases.json"
+FOUND_COVERS_DIR_NAME = "_covers_found"
+FOUND_COVERS_MAP = "map.json"
+found_covers: dict[str, str] = {}
+
+
+def read_json(path: Path, default):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+
+
+def load_found_covers() -> None:
+    global found_covers
+    data = read_json(MUSIC_DIR / FOUND_COVERS_DIR_NAME / FOUND_COVERS_MAP, {})
+    found_covers = {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def found_cover(rel: str) -> str | None:
+    """Cover found online / chosen by hand for track rel (rendered like any other cover)."""
+    name = found_covers.get(rel)
+    img = MUSIC_DIR / FOUND_COVERS_DIR_NAME / name if name else None
+    if not img or "/" in name or "\\" in name or not img.is_file():
+        return None
+    try:
+        return cover_for(rel, img)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def resolved_aliases(tracks: list[dict]) -> dict[str, str]:
+    """_aliases.json with chains followed (a -> b -> c), only towards tracks still in the library."""
+    raw = read_json(MUSIC_DIR / ALIASES_NAME, {})
+    present = {t["file"] for t in tracks}
+    out = {}
+    for old in raw:
+        new, seen = raw[old], {old}
+        while new in raw and new not in seen:
+            seen.add(new)
+            new = raw[new]
+        if isinstance(new, str) and new in present and old not in present:
+            out[old] = new
+    return out
+
+
+def write_library_index(tracks: list[dict]) -> None:
+    keys = ("file", "folder", "title", "artist", "album", "duration", "cover", "loudness", "episode")
+    try:
+        write_json(MUSIC_DIR / LIBRARY_INDEX_NAME, [{k: t.get(k) for k in keys} for t in tracks])
+    except OSError as exc:
+        print(f"  WARNING: {LIBRARY_INDEX_NAME} not saved ({exc})")
+
+
 def write_library(tracks: list[dict]) -> None:
     lines = [
         "-- GENERATED by Import music.py (tools/import_music.py of Kalimdor ZugZug Radio): do not edit by hand.",
@@ -1311,12 +1468,20 @@ def write_library(tracks: list[dict]) -> None:
         for key in ("year", "track", "disc"):
             if t.get(key):
                 fields.append(f"{key} = {int(t[key])}")
+        if t.get("loudness") is not None:
+            fields.append(f"loudness = {float(t['loudness']):.1f}")
         if t.get("episode"):
             fields += [f"episode = {lua_str(t['episode'])}", f"part = {t['part']}", f"parts = {t['parts']}"]
             if t.get("serial"):
                 fields.append("serial = true")
         lines.append("    { " + ", ".join(fields) + " },")
-    lines += ["  },", "}", ""]
+    lines.append("  },")
+    aliases = resolved_aliases(tracks)
+    if aliases:
+        lines.append("  aliases = {")
+        lines += [f"    [{lua_str(old)}] = {lua_str(new)}," for old, new in sorted(aliases.items())]
+        lines.append("  },")
+    lines += ["}", ""]
     LIBRARY_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -1544,6 +1709,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--library", metavar="FOLDER",
                         help="your music library: tracks not yet in music/ are copied there and converted "
                              "(the library is only read; missing covers are also recovered from it)")
+    parser.add_argument("--no-loudness", action="store_true",
+                        help="don't measure the volume of new tracks (the addon evens out the volume only "
+                             "of tracks already measured)")
+    parser.add_argument("--find-duplicates", action="store_true",
+                        help="list the tracks that look like duplicates and exit (the Import music window "
+                             "can move them away)")
     parser.add_argument("--addon", metavar="FOLDER",
                         help=f"addon folder (the one with {ADDON_NAME}.toc), if it isn't found automatically")
     parser.add_argument("--no-menu", action="store_true",
@@ -1592,6 +1763,12 @@ def main() -> None:
                  f"--addon \"path\\{ADDON_NAME}\"")
     stats = new_stats()
     prepare_addon(addon, stats)
+    if args.find_duplicates:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import library_tools
+        library_tools.im = sys.modules[__name__]  # this module, also when run as a script (__main__)
+        library_tools.print_duplicates()
+        return
     if interactive:
         saved = load_settings().get("library")
         if saved and Path(saved).is_dir():
@@ -1608,7 +1785,8 @@ def run_import(args: argparse.Namespace, stats: dict, confirm=None, progress=Non
     """The import itself, after prepare_addon(). confirm(track_count) -> bool is asked before copying from
     the library (None: yes); progress(done, total, label) is called for each music folder and
     podcast_progress (see update_podcasts; on a console it defaults to one updating line) while
-    episodes download and convert. Returns a summary for the window."""
+    episodes download and convert; while the volume is measured it is called as
+    progress(done, total, label, "loudness"). Returns a summary for the window."""
     # tracks to copy from the user's library: listed (and confirmed in the menu) before any work
     library = Path(args.library).expanduser() if args.library else None
     missing: list[Path] = []
@@ -1638,6 +1816,7 @@ def run_import(args: argparse.Namespace, stats: dict, confirm=None, progress=Non
         shutil.rmtree(ORIGINALS_DIR)
     load_cover_index()
     load_probe_cache()
+    load_found_covers()
     if missing:
         copy_missing(library, missing, stats)
     if not args.keep_names:
@@ -1668,9 +1847,12 @@ def run_import(args: argparse.Namespace, stats: dict, confirm=None, progress=Non
         recovered = recover_covers(tracks, source_root, stats, finder)
         genres_fixed = recover_genres(tracks, finder)
 
+    measured = add_loudness(tracks, stats, not getattr(args, "no_loudness", False), progress)
+
     if progress:
         progress(len(folders), len(folders), "")
     write_library(tracks)
+    write_library_index(tracks)
     save_probe_cache()
     save_cover_index()
     removed = remove_unused_covers(tracks)
@@ -1682,6 +1864,9 @@ def run_import(args: argparse.Namespace, stats: dict, confirm=None, progress=Non
     print(f"Covers: {unique} distinct images for {with_cover} tracks"
           + (f", {recovered} recovered from {Path(covers_source)}" if covers_source else "")
           + (f" ({removed} unused files removed)" if removed else "") + ".")
+    with_loudness = sum(1 for t in tracks if t.get("loudness") is not None)
+    print(f"Volume: {with_loudness} of {len(tracks)} files measured"
+          + (f" ({measured} new)" if measured else "") + ".")
     with_genre = sum(1 for t in tracks if t.get("genre") and not t.get("episode"))
     print(f"Genres: {with_genre} tracks have one"
           + (f", {genres_fixed} corrected from the originals in {Path(covers_source)}" if genres_fixed else "") + ".")

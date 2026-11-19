@@ -63,6 +63,7 @@ local DEFAULTS = {
   charProfiles = {}, -- "Name-Realm" -> profile name
   crossfade = true,  -- fade the music volume when the condition changes
   smartShuffle = true, -- weighted shuffle: skipped/recent tracks less often, unheard ones more
+  normalize = true,  -- even out the volume of the tracks (loudness measured by the import)
   zoneBreaks = false,   -- now and then let the game's zone music play between two tracks
   zoneBreakEvery = 3,   -- ... every N tracks
   zoneBreakMinutes = 2, -- ... for M minutes
@@ -71,6 +72,8 @@ local DEFAULTS = {
   afkPause = true,   -- pause while AFK
   userVolume = nil,  -- the user's Music volume (the addon multiplies it, see Player.lua)
   favorites = {},    -- track id -> true
+  ratings = {},      -- track id -> 1..5 stars (no entry = not rated)
+  listen = {},       -- "YYYY-MM" -> listening stats of that month (see ns.RecordListen)
   excluded = {},     -- track id -> true (never played automatically)
   history = {},      -- track ids, most recent first (max 50)
   stats = {},        -- track id -> { plays = n, seconds = s, skips = n }
@@ -271,6 +274,33 @@ local function indexTrack(t, list, byId)
   ns.trackById[t.file] = t
 end
 
+-- Volume normalization. The import measures each file's loudness (LUFS, Library.lua "loudness");
+-- the volume of a track is corrected towards the median of the user's music (ns.loudnessRef), so
+-- on average the library sounds as loud as before. Game music and unmeasured tracks: no change.
+local SILENT_LUFS = -60
+local MAX_CUT_DB, MAX_BOOST_DB = 15, 10
+
+function ns.MedianLoudness(tracks)
+  local v = {}
+  for _, t in ipairs(tracks) do
+    local l = tonumber(t.loudness)
+    if l and l > SILENT_LUFS then v[#v + 1] = l end
+  end
+  if #v == 0 then return nil end
+  table.sort(v)
+  local mid = math.floor(#v / 2)
+  return #v % 2 == 1 and v[mid + 1] or (v[mid] + v[mid + 1]) / 2
+end
+
+-- Volume multiplier of a track (1 = unchanged). Above 1 it can only help when the user's volume
+-- leaves room: the Music volume can't go past 100%.
+function ns.TrackGain(t)
+  local l = t and tonumber(t.loudness)
+  if not (ns.db and ns.db.normalize) or not ns.loudnessRef or not l or l <= SILENT_LUFS then return 1 end
+  local db = math.max(-MAX_CUT_DB, math.min(MAX_BOOST_DB, ns.loudnessRef - l))
+  return 10 ^ (db / 20)
+end
+
 function ns.LoadLibrary()
   for _, t in ipairs({ ns.tracks, ns.gameTracks, ns.everyTrack, ns.episodes, ns.trackById, ns.userById,
                        ns.gameById, ns.episodeById }) do wipe(t) end
@@ -282,13 +312,14 @@ function ns.LoadLibrary()
     lib, ns.LIB_ROOT = KZZR_Library, ns.ROOT -- library imported before 0.8, inside this addon
   end
   ns.library = lib
+  ns.aliases = type(lib) == "table" and type(lib.aliases) == "table" and lib.aliases or {}
   for _, t in ipairs((type(lib) == "table" and lib.tracks) or {}) do
     if type(t.file) == "string" and type(t.episode) == "string" then
       local ep = episodes[t.episode]
       if not ep then
         ep = { file = "ep:" .. t.episode, episode = t.episode, podcast = true, title = t.title or "?",
                artist = t.artist, album = t.album, folder = t.folder, cover = t.cover, parts = {}, duration = 0,
-               serial = t.serial == true }
+               serial = t.serial == true, loudness = t.loudness }
         episodes[t.episode] = ep
       end
       table.insert(ep.parts, { file = t.file, duration = tonumber(t.duration) or 0, index = t.part or #ep.parts + 1 })
@@ -297,6 +328,7 @@ function ns.LoadLibrary()
       indexTrack(t, ns.tracks, ns.userById)
     end
   end
+  ns.loudnessRef = ns.MedianLoudness(ns.tracks)
   for _, ep in pairs(episodes) do
     table.sort(ep.parts, function(a, b) return a.index < b.index end)
     for _, part in ipairs(ep.parts) do ep.duration = ep.duration + part.duration end
@@ -368,6 +400,59 @@ local cache = {} -- name -> { name, tracks = {...}, has = { [file] = true } }
 local function invalidate(name)
   if name then cache[name] = nil else wipe(cache) end
   ns.Fire("PLAYLISTS_CHANGED", name)
+end
+
+-- Duplicates removed by Import music.py: Library.lua's "aliases" maps each removed track id to the
+-- one that was kept. Playlists, favourites, ratings, stats, history and the queue move to the kept
+-- track, so removing a duplicate never empties a playlist. Idempotent: run at every load.
+local function mergeStats(into, from)
+  into.plays = (into.plays or 0) + (from.plays or 0)
+  into.seconds = (into.seconds or 0) + (from.seconds or 0)
+  local skips = (into.skips or 0) + (from.skips or 0)
+  into.skips = skips > 0 and skips or nil
+end
+
+function ns.ApplyAliases()
+  local db, moved = ns.db, 0
+  for old, new in pairs(ns.aliases or {}) do
+    if type(old) == "string" and type(new) == "string" and old ~= new and ns.trackById[new] and not ns.trackById[old] then
+      for _, ids in pairs(db.playlists) do
+        local hasNew = false
+        for _, id in ipairs(ids) do if id == new then hasNew = true break end end
+        for i = #ids, 1, -1 do
+          if ids[i] == old then
+            moved = moved + 1
+            if hasNew then table.remove(ids, i) else ids[i] = new hasNew = true end
+          end
+        end
+      end
+      for _, list in ipairs({ db.history, db.upNext }) do
+        for i = #list, 1, -1 do if list[i] == old then list[i] = new end end
+      end
+      for _, set in ipairs({ db.favorites, db.excluded }) do
+        if set[old] then set[new] = set[new] or set[old] set[old] = nil end
+      end
+      if db.ratings[old] then
+        db.ratings[new] = math.max(tonumber(db.ratings[new]) or 0, tonumber(db.ratings[old]) or 0)
+        db.ratings[old] = nil
+      end
+      if db.stats[old] then
+        db.stats[new] = db.stats[new] or { plays = 0, seconds = 0 }
+        mergeStats(db.stats[new], db.stats[old])
+        db.stats[old] = nil
+      end
+      for _, m in pairs(db.listen) do
+        for _, tbl in ipairs({ m.t or {} }) do
+          if tbl[old] then tbl[new] = (tbl[new] or 0) + tbl[old] tbl[old] = nil end
+        end
+        for _, c in pairs(m.c or {}) do
+          if c.t and c.t[old] then c.t[new] = (c.t[new] or 0) + c.t[old] c.t[old] = nil end
+        end
+      end
+    end
+  end
+  if moved > 0 then invalidate() end -- every cached playlist, then PLAYLISTS_CHANGED
+  return moved
 end
 
 -- Virtual playlists: translation key of the label and the words that find them in /kzz playlist.
@@ -622,7 +707,8 @@ ns.SMART_FIELDS = {
   { key = "title", kind = "text" }, { key = "artist", kind = "text" }, { key = "album", kind = "text" },
   { key = "genre", kind = "text" }, { key = "composer", kind = "text" }, { key = "year", kind = "number" },
   { key = "folder", kind = "text" }, { key = "source", kind = "source" }, { key = "plays", kind = "number" },
-  { key = "minutes", kind = "number" }, { key = "favorite", kind = "flag" }, { key = "never", kind = "flag" },
+  { key = "minutes", kind = "number" }, { key = "rating", kind = "number" }, { key = "favorite", kind = "flag" },
+  { key = "never", kind = "flag" },
 }
 ns.SMART_OPS = { text = { "has", "not", "is" }, source = { "is", "isnot" }, number = { "ge", "le" }, flag = { "yes", "no" } }
 ns.SMART_SOURCES = { "mine", "game", "podcast" }
@@ -661,6 +747,8 @@ local function matchRule(t, r)
     elseif r.field == "year" then
       v = tonumber(t.year)
       if not v then return false end -- no year in the tags: never matches a year rule
+    elseif r.field == "rating" then
+      v = ns.GetRating(t) -- 0 = not rated
     else
       v = (tonumber(t.duration) or 0) / 60
     end
@@ -1001,16 +1089,72 @@ function ns.ToggleFavorite(t)
   invalidate(ns.FAV)
 end
 
+-- Star ratings (1-5). They weigh in the smart shuffle and can be used by smart playlist rules.
+ns.RATING_WEIGHT = { 0.3, 0.6, 1, 1.5, 2 }
+function ns.GetRating(t)
+  local n = t and t.file and tonumber(ns.db.ratings[t.file])
+  return n and math.max(0, math.min(5, math.floor(n))) or 0
+end
+
+function ns.SetRating(t, n)
+  if not t or not t.file then return end
+  n = math.max(0, math.min(5, math.floor(tonumber(n) or 0)))
+  ns.db.ratings[t.file] = n > 0 and n or nil
+  ns.InvalidateDynamic()
+  ns.Fire("RATING_CHANGED", t)
+end
+
+-- "★★★☆☆" (empty = false: only the filled stars).
+function ns.Stars(n, withEmpty)
+  n = math.max(0, math.min(5, math.floor(tonumber(n) or 0)))
+  return ("\226\152\133"):rep(n) .. (withEmpty and ("\226\152\134"):rep(5 - n) or "")
+end
+
 function ns.SetExcluded(t, on)
   if not t then return end
   ns.db.excluded[t.file] = on or nil
   ns.Fire("PLAYLISTS_CHANGED")
 end
 
+-- Listening stats by month (db.listen["YYYY-MM"]), for the stats window:
+--   s = seconds, p = tracks started, t = {id -> seconds},
+--   c = {condition -> {s, t = {id -> seconds}}} ("free" = free play), z = {zone name -> seconds}.
+-- ctx = {cond, zone} of the track when it started (the player keeps it in P.listenCtx).
+local function monthKey()
+  local d = date or (os and os.date)
+  return d and d("%Y-%m") or "?"
+end
+ns.MonthKey = monthKey
+
+local function month()
+  local key = monthKey()
+  local m = ns.db.listen[key]
+  if not m then
+    m = { s = 0, p = 0, t = {}, c = {}, z = {} }
+    ns.db.listen[key] = m
+  end
+  return m
+end
+
+function ns.RecordListen(t, seconds, ctx)
+  if not t or not t.file or not seconds or seconds <= 0 then return end
+  local m = month()
+  m.s = m.s + seconds
+  m.t[t.file] = (m.t[t.file] or 0) + seconds
+  if ctx and ctx.cond then
+    local c = m.c[ctx.cond] or { s = 0, t = {} }
+    c.s = c.s + seconds
+    c.t[t.file] = (c.t[t.file] or 0) + seconds
+    m.c[ctx.cond] = c
+  end
+  if ctx and type(ctx.zone) == "string" and ctx.zone ~= "" then m.z[ctx.zone] = (m.z[ctx.zone] or 0) + seconds end
+end
+
 -- Called by the player when a track starts (new) and/or stops (prev, with the seconds played).
 local lastRecorded
 function ns.RecordPlay(prev, new, seconds)
   if prev and (seconds or 0) > 0 then
+    ns.RecordListen(prev, seconds, ns.Player and ns.Player.listenCtx)
     local st = ns.db.stats[prev.file] or { plays = 0, seconds = 0 }
     st.seconds = (st.seconds or 0) + seconds
     -- listened to the end: forgive one old skip
@@ -1021,6 +1165,7 @@ function ns.RecordPlay(prev, new, seconds)
   end
   if new and new ~= lastRecorded then -- podcast parts of the same episode count once
     lastRecorded = new
+    month().p = month().p + 1
     local st = ns.db.stats[new.file] or { plays = 0, seconds = 0 }
     st.plays = (st.plays or 0) + 1
     ns.db.stats[new.file] = st
@@ -1044,7 +1189,8 @@ function ns.RecordSkip(track, elapsed)
 end
 
 -- Weighted shuffle: how likely each track is to come early in the queue.
--- Never heard x1.5, each skip divides by 1 + 0.5 x skips, recently played much less.
+-- Never heard x1.5, each skip divides by 1 + 0.5 x skips, recently played much less, and the
+-- stars count (1 star x0.3 ... 5 stars x2, not rated x1).
 -- No track is ever left out (excluding is a separate, explicit choice).
 local RECENT_STRONG, RECENT_WEAK = 10, 25
 function ns.ShuffleWeights(tracks)
@@ -1059,6 +1205,7 @@ function ns.ShuffleWeights(tracks)
     local v = (not st or (st.plays or 0) == 0) and 1.5 or 1
     if st and st.skips then v = v / (1 + 0.5 * st.skips) end
     v = v * (recent[t.file] or 1)
+    v = v * (ns.RATING_WEIGHT[ns.GetRating(t)] or 1)
     w[i] = math.max(v, 0.1)
   end
   return w
@@ -1397,6 +1544,7 @@ ns.RegisterEvent("ADDON_LOADED", function(name)
   step("InitLanguage", function() ns.InitLanguage(ns.db.lang) end)
   step("Bindings", function() ns.SetupBindings() end)
   step("LoadLibrary", ns.LoadLibrary)
+  step("Aliases", ns.ApplyAliases)
   if ns.db.mode ~= "auto" and not ns.GetPlaylist(ns.db.mode) then ns.db.mode = "auto" end
 end)
 
@@ -1517,10 +1665,14 @@ SlashCmdList.KZZRADIO = function(msg)
     local played = 0
     for _, st in pairs(ns.db.stats) do played = played + (st.plays or 0) end
     ns.Print("MSG_STATS", ns.FormatDuration(ns.db.totalSeconds), played)
-    local top = ns.GetPlaylist(ns.TOP)
-    for i = 1, math.min(5, top and #top.tracks or 0) do
-      local t = top.tracks[i]
-      print(("   %d. %s  (%s)"):format(i, ns.TrackLabel(t), CL.PLAYS_FMT:format(ns.db.stats[t.file].plays)))
+    ns.Stats:Toggle(true)
+  elseif cmd == "rate" then
+    local t, n = P.track, tonumber(rest)
+    if not t or t.podcast then ns.Print("MSG_RATE_NOTHING")
+    elseif not n or n < 0 or n > 5 then ns.Print("HELP_15")
+    else
+      ns.SetRating(t, n)
+      ns.Print("MSG_RATED", ns.TrackLabel(t), n > 0 and ("%d/5"):format(n) or CL.RATING_NONE) -- no star glyph in the chat font
     end
   elseif cmd == "perf" then
     if rest == "reset" then wipe(ns.perf) ns.perfSince = GetTime() end
@@ -1532,6 +1684,6 @@ SlashCmdList.KZZRADIO = function(msg)
     for _, line in ipairs(ns.db.lastDebug) do print(line) end
     print("  (saved: /reload to write it to SavedVariables\\KalimdorZugZugRadio.lua)")
   else
-    for i = 1, 14 do ns.Print("HELP_" .. i) end
+    for i = 1, 15 do ns.Print("HELP_" .. i) end
   end
 end

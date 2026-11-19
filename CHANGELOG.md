@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0
+
+The biggest update so far: your listening stats, star ratings, even volume across your tracks, and two new tools in the import window to clean up your library.
+
+- **Listening stats ("Azeroth Wrapped")**: a new window (*Listening stats* in the player's menu, or `/kzz stats`) for this month, this year or all time: hours listened, tracks played, top tracks with their covers, top artists and genres, the track you heard most under each condition (your boss song, your combat song, free play...) and the zones where you listened most. *Share* copies a text summary to paste in the chat or on Discord. Conditions and zones are counted from this version on; the all-time tracks include what you heard before.
+- **Star ratings**: rate tracks from 1 to 5 stars (right-click in the library, *Rate this track* in the player's menu, `/kzz rate 1-5`). The stars show under the title in the library; smart shuffle plays 5-star tracks about twice as often and 1-star tracks rarely; smart playlists have a new *Rating* rule.
+- **Even volume**: some tracks were much louder than others (up to 12 dB apart in a real library). Import music.py now measures the loudness of every track and podcast episode (EBU R128, with ffmpeg), and the addon corrects the volume of each track towards the middle of your library. The files are not changed. Option *Even out the volume* in the settings, on by default. A quiet track can only be raised if your Music volume is below 100%. `--no-loudness` skips the measure.
+- **Find duplicates** (Import music window, *Library tools*): the same song twice (same title and artist, about the same length) or the same recording under another name (recognised by its loudness, second by second). The best copy is kept; the others are moved to `KalimdorZugZugRadio_Library\_duplicates\`, never deleted, and your playlists, favourites, ratings and stats move to the copy you keep. `--find-duplicates` lists them in a terminal.
+- **Covers from the internet** (Import music window, *Library tools*): for albums without a cover, the cover is looked up on MusicBrainz and the Cover Art Archive and shown to you before it is used; you can also pick another result, choose an image from your PC, or skip. Only album and artist names are sent, after you agree.
+- **Run Import music.py once after updating**: it measures the volume of every track (about 0.3 s per track, only this time; then only new files). Until then the addon works as before.
+- Fixed: the smart playlist editor failed to open the first time (`LibraryUI.lua:585: attempt to index field 'rules'`).
+
 ## 1.5.0
 
 Kalimdor ZugZug Radio now runs on **Retail** too (The War Within / Midnight, 12.1.5), with the same download as WoW Forever.

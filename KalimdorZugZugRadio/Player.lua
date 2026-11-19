@@ -111,6 +111,9 @@ local function startTrack(queued)
   ns.RecordPlay(P.track, track, P.playing and (GetTime() - P.startTime) or 0)
   cancelTimer()
   P.track = track
+  -- what the stats window counts this track under (condition or free play, and the zone)
+  local zone = ns.CurrentZone and ns.CurrentZone()
+  P.listenCtx = { cond = ns.db.mode == "auto" and ns.Rules and ns.Rules.current or "free", zone = zone and zone.name }
   local source, dur
   if track.parts then
     -- podcast: play the part to resume from; P.offset = duration of the previous parts
@@ -124,6 +127,7 @@ local function startTrack(queued)
     P.part, P.offset = nil, 0
     source, dur = track.fid or (ns.LIB_ROOT .. track.file), track.duration
   end
+  P:SetTrackGain(ns.TrackGain(track)) -- before the file starts, so it never plays at the old level
   local ok, err = pcall(playMusic, source)
   if not ok then ns.Print("MSG_PLAYMUSIC_ERROR", tostring(err)) end
   P.playing = true
@@ -229,13 +233,13 @@ end
 ---------------------------------------------------------------------------
 -- Volume controller. WoW has no per-track volume: everything goes through the Music
 -- volume CVar. The user's volume (db.userVolume) is the only source of truth; what we
--- write is   user x condition volume x dialogue ducking x crossfade.
+-- write is   user x condition volume x dialogue ducking x crossfade x track loudness correction.
 -- If the CVar is changed outside the addon (game Options), it is adopted as the new
 -- user volume. On logout the plain user volume is written back.
 ---------------------------------------------------------------------------
 local FADE_STEPS, FADE_TIME = 8, 0.8
 local DUCK_LEVEL = 0.25
-local V = { user = nil, cond = 1, duck = 1, fade = 1, lastWritten = nil, lastMul = 1 }
+local V = { user = nil, cond = 1, duck = 1, fade = 1, track = 1, lastWritten = nil, lastMul = 1 }
 local tweens = {}
 
 local function getVolume()
@@ -264,7 +268,7 @@ end
 
 local function applyVolume()
   syncExternal()
-  local mul = V.cond * V.duck * V.fade
+  local mul = V.cond * V.duck * V.fade * V.track
   local eff = clamp((V.user or 1) * mul)
   setVolume(eff)
   V.lastWritten, V.lastMul = eff, mul
@@ -302,7 +306,7 @@ function P:InitVolume()
   end
   V.user = ns.db.userVolume or getVolume()
   ns.db.userVolume = V.user
-  V.cond, V.duck, V.fade = 1, 1, 1
+  V.cond, V.duck, V.fade, V.track = 1, 1, 1, 1
   applyVolume()
 end
 
@@ -329,6 +333,19 @@ end
 function P:SetConditionVolume(mult)
   V.cond = clamp(tonumber(mult) or 1)
   applyVolume()
+end
+
+-- Loudness correction of the track about to play (1 when stopped: the game's zone music).
+function P:SetTrackGain(gain)
+  gain = tonumber(gain) or 1
+  if math.abs(gain - V.track) < 0.001 then return end
+  V.track = gain
+  applyVolume()
+end
+
+-- The normalization option changed: correct the current track at once.
+function P:RefreshTrackGain()
+  self:SetTrackGain(self.playing and ns.TrackGain(self.track) or 1)
 end
 
 -- Lowers the music during cinematics and dialogues.
@@ -378,9 +395,10 @@ end
 
 -- For /kzz debug.
 function P:DebugState()
-  return ("playing %s, playlist %s, stopped %s, afk %s, zone break %s, volume x%.2f (cond %.2f duck %.2f fade %.2f)"):format(
+  return ("playing %s, playlist %s, stopped %s, afk %s, zone break %s, volume x%.2f (cond %.2f duck %.2f fade %.2f track %.2f, loudness %s ref %s)"):format(
     tostring(self.playing), tostring(self.playlist), tostring(self.userStopped), tostring(self.afkPaused),
-    tostring(self.zoneBreakUntil ~= nil), V.cond * V.duck * V.fade, V.cond, V.duck, V.fade)
+    tostring(self.zoneBreakUntil ~= nil), V.cond * V.duck * V.fade * V.track, V.cond, V.duck, V.fade, V.track,
+    tostring(self.track and self.track.loudness), tostring(ns.loudnessRef))
 end
 
 -- True when the music must stay silent: stopped by the user, paused while AFK, or during a
@@ -442,6 +460,7 @@ function P:Stop(byUser)
   cancelTimer()
   if self.playing then pcall(StopMusic) end
   self.playing = false
+  self:SetTrackGain(1) -- the game's zone music plays at the user's volume
   if byUser then self.userStopped = true end
   ns.Fire("STATE_CHANGED")
 end

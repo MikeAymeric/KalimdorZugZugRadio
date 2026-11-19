@@ -40,7 +40,7 @@ end
 ---------------------------------------------------------------------------
 -- Content (inside a scroll frame: with 16 conditions it's taller than the Options canvas)
 ---------------------------------------------------------------------------
-local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 762
+local CONTENT_WIDTH, CONTENT_HEIGHT = 640, 788
 local ROWS_PER_COLUMN = 8
 
 -- Submenu with a playlist for each boss / dungeon met so far (seen: id -> name).
@@ -133,8 +133,12 @@ local function build(p)
     ns.db.zoneBreaks = on
     if not on then ns.Player:EndZoneBreak() ns.Rules:Evaluate(true) end
   end, nil, L.TT_ZONE_BREAKS)
+  p.optNormalize = checkOption(c, L.OPT_NORMALIZE, 16, -240, function(on)
+    ns.db.normalize = on
+    ns.Player:RefreshTrackGain()
+  end, nil, L.TT_NORMALIZE)
   p.moveBanner = ns.MakeButton(c, L.MOVE_BANNER, 150, function() ns.Banner:ToggleMoving() end, L.TT_MOVE_BANNER)
-  p.moveBanner:SetPoint("TOPLEFT", 20, -242)
+  p.moveBanner:SetPoint("TOPLEFT", 20, -268)
   -- how often and how long: a few presets
   local BREAKS = { { 2, 1 }, { 3, 2 }, { 5, 3 }, { 8, 5 } }
   p.zoneBreakFreq = ns.MakeDropdown(c, 230, L.ZONE_BREAK_FREQ:format(3, 2), function(_, root)
@@ -148,7 +152,7 @@ local function build(p)
 
   -- profile: the condition settings below belong to it
   local profLabel = text(c, "GameFontNormal")
-  profLabel:SetPoint("TOPLEFT", 20, -278)
+  profLabel:SetPoint("TOPLEFT", 20, -304)
   profLabel:SetText(L.PROFILE)
   p.profile = ns.MakeDropdown(c, 220, L.PROFILE_DEFAULT, function(_, root)
     for _, name in ipairs(ns.ProfileNames()) do
@@ -168,7 +172,7 @@ local function build(p)
 
   -- how long the fight music lasts (fading out) after the combat
   local tailLabel = text(c, "GameFontNormal")
-  tailLabel:SetPoint("TOPLEFT", 334, -278)
+  tailLabel:SetPoint("TOPLEFT", 334, -304)
   tailLabel:SetText(L.OPT_FIGHT_TAIL)
   p.fightTail = ns.MakeDropdown(c, 80, L.FIGHT_TAIL_SECONDS:format(8), function(_, root)
     for _, sec in ipairs({ 4, 6, 8, 10 }) do
@@ -188,28 +192,28 @@ local function build(p)
   end
 
   local langLabel = text(c, "GameFontNormal")
-  langLabel:SetPoint("TOPLEFT", 20, -314)
+  langLabel:SetPoint("TOPLEFT", 20, -340)
   langLabel:SetText(L.LANGUAGE)
   p.lang = ns.LanguageDropdown(c, function() S:Refresh() end)
   if p.lang then p.lang:SetPoint("LEFT", langLabel, "RIGHT", 12, 0) end
   p.reload = ns.MakeButton(c, L.RELOAD, 130, function() ReloadUI() end)
   p.reload:SetPoint("LEFT", p.lang or langLabel, "RIGHT", 12, 0)
   p.langHint = text(c, "GameFontDisableSmall")
-  p.langHint:SetPoint("TOPLEFT", 20, -338)
+  p.langHint:SetPoint("TOPLEFT", 20, -364)
   p.langHint:SetText(L.LANG_RELOAD_HINT)
 
   -- Conditions ---------------------------------------------------------------
-  sectionHeader(c, L.CONDITIONS, -368)
+  sectionHeader(c, L.CONDITIONS, -394)
   -- free play warning: while a playlist is chosen manually, conditions are ignored
   p.freeBack = ns.MakeButton(c, L.BACK_AUTO, 150, function() ns.SetMode("auto") S:Refresh() end, L.TT_BACK_AUTO)
-  p.freeBack:SetPoint("TOPRIGHT", -16, -392)
+  p.freeBack:SetPoint("TOPRIGHT", -16, -418)
   p.freeWarn = text(c, "GameFontNormal")
-  p.freeWarn:SetPoint("TOPLEFT", 16, -396)
+  p.freeWarn:SetPoint("TOPLEFT", 16, -422)
   p.freeWarn:SetPoint("RIGHT", p.freeBack, "LEFT", -10, 0)
   p.freeWarn:SetJustifyH("LEFT")
   p.freeWarn:SetTextColor(1, 0.6, 0.1)
   local hint = text(c, "GameFontHighlightSmall")
-  hint:SetPoint("TOPLEFT", 16, -424)
+  hint:SetPoint("TOPLEFT", 16, -450)
   hint:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   hint:SetJustifyH("LEFT")
   hint:SetText(L.COND_SETTINGS_HINT)
@@ -218,7 +222,7 @@ local function build(p)
   p.conditions = {}
   for i, s in ipairs(ns.SITUATIONS) do
     local col = math.floor((i - 1) / ROWS_PER_COLUMN)
-    local y = -452 - ((i - 1) % ROWS_PER_COLUMN) * 34
+    local y = -478 - ((i - 1) % ROWS_PER_COLUMN) * 34
     local x = 16 + col * 316
     local row = {}
     row.check = checkOption(c, ns.SituationLabel(s.key), x, y, function(on) ns.SetConditionEnabled(s.key, on) end,
@@ -252,7 +256,7 @@ local function build(p)
   end
 
   p.zoneLine = text(c, "GameFontHighlightSmall")
-  p.zoneLine:SetPoint("TOPLEFT", 20, -452 - ROWS_PER_COLUMN * 34 - 6)
+  p.zoneLine:SetPoint("TOPLEFT", 20, -478 - ROWS_PER_COLUMN * 34 - 6)
   p.zoneLine:SetPoint("RIGHT", c, "RIGHT", -16, 0)
   p.zoneLine:SetJustifyH("LEFT")
 
@@ -305,6 +309,7 @@ function S:Refresh()
   panel.optEnabled:SetChecked(ns.db.enabled)
   panel.optShuffle:SetChecked(ns.db.shuffle)
   panel.optSmartShuffle:SetChecked(ns.db.smartShuffle)
+  panel.optNormalize:SetChecked(ns.db.normalize)
   panel.optZoneBreaks:SetChecked(ns.db.zoneBreaks)
   panel.optMinimap:SetChecked(not ns.db.minimap.hide)
   panel.optLock:SetChecked(ns.db.ui.locked)

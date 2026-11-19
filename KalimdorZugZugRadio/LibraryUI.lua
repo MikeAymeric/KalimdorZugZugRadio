@@ -326,6 +326,7 @@ local function trackMenu(row)
     ns.StyleMenuItem(root:CreateButton(ns.IsFavorite(t) and L.FAV_REMOVE or L.FAV_ADD, function() ns.ToggleFavorite(t) end))
     ns.StyleMenuItem(root:CreateButton(ns.IsExcluded(t) and L.INCLUDE or L.EXCLUDE,
       function() ns.SetExcluded(t, not ns.IsExcluded(t)) end))
+    if not t.podcast then ns.RatingMenu(root, L.RATING, function() return t end) end
   end)
 end
 
@@ -380,6 +381,8 @@ local function buildTrackRows()
     elseif t.folder ~= "" then
       sub = sub ~= "" and (sub .. "  ·  " .. t.folder) or t.folder
     end
+    local stars = ns.GetRating(t)
+    if stars > 0 then sub = ns.Stars(stars) .. "  " .. sub end
     ns.SetText(row.sub, sub, "GameFontDisableSmall")
     row.dur:SetText((tonumber(t.duration) or 0) > 0 and ns.FormatTime(t.duration) or "")
     if LUI.selected == ns.TOP and ns.db.stats[t.file] then
@@ -582,7 +585,8 @@ local function buildEditorRow(i)
   local row = CreateFrame("Frame", nil, E)
   row:SetSize(440, 26)
   row:SetPoint("TOPLEFT", 16, -104 - (i - 1) * 30)
-  local function rule() return E.rules[i] end
+  -- SetupMenu runs the generators at once, before OpenSmartEditor fills E.rules.
+  local function rule() return E.rules and E.rules[i] end
   row.fieldDD = ns.MakeDropdown(row, 124, L.SMART_F_title, function(_, root)
     for _, fd in ipairs(ns.SMART_FIELDS) do
       ns.StyleMenuItem(root:CreateRadio(L["SMART_F_" .. fd.key],
@@ -639,6 +643,7 @@ local function buildSmartEditor()
   E:SetScript("OnDragStart", E.StartMoving)
   E:SetScript("OnDragStop", E.StopMovingOrSizing)
   E:Hide()
+  E.rules = {}
   if UISpecialFrames then table.insert(UISpecialFrames, E:GetName()) end
 
   E.titleFS = text(E, "GameFontNormal")
@@ -751,6 +756,7 @@ function LUI:Build()
 
   ns.On("PLAYLISTS_CHANGED", function() if f:IsShown() then LUI:Refresh() end end)
   ns.On("MODE_CHANGED", function() if f:IsShown() then LUI:Refresh() end end)
+  ns.On("RATING_CHANGED", function() if f:IsShown() then LUI:Refresh() end end)
   ns.On("TRACK_CHANGED", function()
     if f:IsShown() then f.tracks:Update() f.groups:Update() f.playlists:Update() end
   end)

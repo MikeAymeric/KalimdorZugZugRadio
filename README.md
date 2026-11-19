@@ -20,7 +20,9 @@ It plays **your own playlists** based on what your character is doing: a boss fi
 
 - **Conditional music**: 16 conditions (boss, elite, combat, flight, campfire, zone, night and more), each with its own playlist and volume, plus playlists for specific zones, dungeons and bosses. Fight music fades out gently after the fight, and every fight starts a new song.
 - **Your music library**: your own files (mp3, ogg, mp4, m4a, flac, wav...) with covers, organized in playlists created in-game, browsable by album, artist and genre.
-- **Smart playlists** that fill themselves by rules (artist, genre, year, plays, favourites...), a **play-next queue** and a **smart shuffle** that plays skipped tracks less often.
+- **Smart playlists** that fill themselves by rules (artist, genre, year, plays, favourites...), a **play-next queue**, a **smart shuffle** that plays skipped tracks less often and your 5-star tracks more, and **even volume** across your tracks.
+- **Listening stats**: your "Azeroth Wrapped" by month, year or all time, with your boss song, your combat song and the zones where you listened most.
+- **Import window tools**: find duplicate tracks (nothing is deleted, playlists follow the kept copy) and covers for albums without one, from MusicBrainz.
 - **Game soundtrack**: about 600 WoW Forever and classic tracks, plus on Retail about 5,700 tracks of every expansion from The Burning Crusade to Midnight, ready to use, with an in-game icon as the cover, and ready-made playlists for each condition.
 - **Welcome guide**: sets everything up in a minute the first time you log in.
 - **Podcasts**: the latest episodes of your favourite podcasts, resumed where you left off.
@@ -92,6 +94,8 @@ What the script does:
 - **Recovering covers**: if tracks lost their cover (for example after an interrupted import of an older version) and you still have the original files elsewhere, with the same folders and file names, choose that folder in *Recover missing covers from* (or pass `--covers-from "D:\path\to\originals"`). That folder is only read.
 - **Tags**: title, artist, album, genre, year, composer and track numbers are read from each file. Many store-bought MP4 files keep the genre in a way ffmpeg misreads (a game soundtrack shows up as "Big Band"): the script reads the right genre from the file itself, and for tracks converted by an older version from the originals in your music library.
 - **File names**: files and folders with non-Latin characters (Japanese, accents...) are renamed, because WoW may not be able to open them. The original names are still shown in-game. Untick *Rename files with non-Latin names* (or pass `--keep-names`) to disable this.
+- **Duplicates**: *Find duplicates...* (in the *Library tools* row) lists the tracks that look like the same song: the same title and artist with about the same length, or the same recording under another name (recognised by its loudness, second by second). For each group, the best copy (with a cover, higher quality) is kept and the others are marked *move away*; double-click a track to change it. The ones you move go to `KalimdorZugZugRadio_Library\_duplicates\`: nothing is deleted, and your playlists, favourites, ratings and stats move to the track you keep. `--find-duplicates` lists them in a terminal without moving anything.
+- **Covers from the internet**: *Find covers online...* looks up the albums that have no cover on [MusicBrainz](https://musicbrainz.org) and shows the cover found on the [Cover Art Archive](https://coverartarchive.org): *Use this cover*, *Another result*, *Choose an image...* (any image on your PC) or *Skip*. Only the album and artist names are sent, after you agree. The covers are kept in `music\_covers_found\` and used by the import, which starts by itself at the end.
 - **Where things go**: the music, `covers`, `Library.lua`, `podcasts.txt` and the script's settings are all in `AddOns\KalimdorZugZugRadio_Library`, a small data addon created by the script, so that addon updates never delete them.
 - Run the script again every time you add or remove music.
 
@@ -142,8 +146,10 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
 - **Playlists** (left): create, rename, delete, export and import. The virtual playlists are always there: *Whole library*, *WoW music*, *Podcasts*, *Favourites*, *Recently played*, *Most played*.
 - **Tracks** (right): select one of your playlists and tick the tracks to include. The search filters by title, artist, album, folder, genre or composer; *Add visible* adds every track in the list. The *Source* menu shows your music, podcasts or the game music.
 - **Tracks / Albums / Artists / Genres**: the buttons above the list switch view. Click an album, artist or genre to see its tracks (*< Back* returns to the list), press **>** or *Play* to listen to all of it. With one of your playlists selected, *Add visible* inside an album adds the whole album.
-- **>** or a double-click plays a track. The **star** adds it to your favourites. **Right-click** a track for *Play next*, *Add to queue* and *Never play this track* (it is skipped unless you choose it yourself). Right-click an album for *Play next* and *Add to queue*.
-- **Smart playlists** (shown in blue): *New smart* opens the rules editor. Give it a name, choose *Match all the rules* or *Match any rule*, and add up to 6 rules: title, artist, album, genre, composer, year, folder, source, plays, length, favourite, never played. The editor shows how many tracks match. The playlist updates by itself as you listen and import music, and can be assigned to conditions like any other. *Edit rules* changes the selected one.
+- **>** or a double-click plays a track. The **star** adds it to your favourites. **Right-click** a track for *Play next*, *Add to queue*, *Never play this track* (it is skipped unless you choose it yourself) and **Rating** (1 to 5 stars, shown under the title). Right-click an album for *Play next* and *Add to queue*.
+- **Ratings**: rate a track from its right-click menu, from the player's menu (*Rate this track*) or with `/kzz rate 1-5`. With smart shuffle on, 5-star tracks come up about twice as often and 1-star tracks rarely; smart playlists can use the rating (*Rating (stars)* at least 4, for example).
+- **Listening stats**: *Listening stats* in the player's menu, or `/kzz stats`, opens your "Azeroth Wrapped" for this month, this year or all time: hours listened, top tracks, artists and genres, the track you heard most under each condition (your boss song, your combat song...) and the zones where you listened most. *Share* copies a text summary for the chat or Discord. Conditions and zones are counted from version 2.0.
+- **Smart playlists** (shown in blue): *New smart* opens the rules editor. Give it a name, choose *Match all the rules* or *Match any rule*, and add up to 6 rules: title, artist, album, genre, composer, year, folder, source, plays, length, rating, favourite, never played. The editor shows how many tracks match. The playlist updates by itself as you listen and import music, and can be assigned to conditions like any other. *Edit rules* changes the selected one.
 - **Export / Import**: share a playlist as text. Game music works for everyone; your own files only if the other player has the same files.
 
 ### Settings
@@ -152,6 +158,7 @@ Open it with the **Library** button, with `/kzz lib`, or by right-clicking the m
 
 - **General**: radio on/off, shuffle, classic style, fade between conditions, minimap button, lock the player, "Now playing" banner (the *Move banner* button lets you drag it anywhere), pause when AFK, lower the music in cinematics and dialogues, compact player, **profile** and **language**, and the *Tutorial* button.
 - **Smart shuffle** (on by default): tracks you skip early and the ones you just heard come up less often, tracks you have never heard more often. No track is ever left out.
+- **Even out the volume** (on by default): Import music.py measures how loud each of your tracks is (the files are not changed), and the addon plays them all at about the same volume. Tracks imported before 1.6 are measured the next time you run Import music.py. A quiet track can only be raised if your Music volume is below 100%, so if quiet tracks still sound quiet, lower the Music volume a little. The game's own music is not changed.
 - **Music after a fight**: how long the fight music keeps playing, slowly fading out, before the next condition (4 to 10 seconds; 4 after a boss). If you start another fight meanwhile, the song goes on. Every new fight starts a different song.
 - **Zone music between tracks** (off by default): in calm conditions (no condition, zone, city, night, mounted) the game's own zone music plays every few tracks for a few minutes. Some areas have long silences or no zone music.
 - **Next / previous** only change the track: in automatic mode the conditions keep choosing the music.
@@ -203,7 +210,8 @@ Left-click: player. Right-click: library. Shift-click: play/stop. Ctrl-click: se
 | `/kzz playlist <name>` | Play a playlist freely (`all`, `wow`, `podcast` also work) |
 | `/kzz on`, `off` | Turn the radio on or off |
 | `/kzz status` | Active conditions and their playlists |
-| `/kzz stats` | Listening time and most played tracks |
+| `/kzz stats` | Open the listening stats |
+| `/kzz rate <1-5>` | Rate the track playing (`0` removes the rating) |
 | `/kzz lang <code>` | Addon language (`auto`, `en`, `fr`, `de`, `es`, `pt`, `it`, `ru`, `zh`, `ja`...), then `/reload` |
 | `/kzz minimap`, `lock`, `reset` | Minimap button, lock or reset the player position |
 | `/kzz banner` | Move the "Now playing" banner (drag it; right-click resets it, click to finish) |

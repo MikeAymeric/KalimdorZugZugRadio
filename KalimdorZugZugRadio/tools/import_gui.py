@@ -26,6 +26,7 @@ from tkinter.scrolledtext import ScrolledText
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_music as im  # noqa: E402
+import library_tools as lt  # noqa: E402
 from import_strings import Texts, detect_language  # noqa: E402
 
 ISSUES_URL = "https://github.com/MikeAymeric/KalimdorZugZugRadio/issues"
@@ -155,6 +156,136 @@ class EpisodePicker(Dialog):
         self.result = f"{ep['date']}:{ep['key']}"
 
 
+class DuplicatesDialog(Dialog):
+    """Groups of duplicates; each track is kept or moved away (double-click switches).
+    Result: [(track to move away, track kept), ...]."""
+
+    def __init__(self, parent, title, groups):
+        self.groups = groups
+        self.remove: dict[str, bool] = {}
+        self.items: dict[str, tuple[int, dict]] = {}
+        super().__init__(parent, title)
+
+    def body(self, master):
+        ttk.Label(master, text=T("dup_prompt"), wraplength=700).pack(anchor="w", pady=(0, 6))
+        frame = ttk.Frame(master)
+        frame.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(frame, columns=("length", "quality", "action"), height=18, selectmode="browse")
+        self.tree.heading("#0", text=T("dup_col_track"))
+        self.tree.heading("length", text=T("dup_col_length"))
+        self.tree.heading("quality", text=T("dup_col_quality"))
+        self.tree.heading("action", text=T("dup_col_action"))
+        self.tree.column("#0", width=430)
+        for col, width in (("length", 70), ("quality", 90), ("action", 120)):
+            self.tree.column(col, width=width, anchor="center", stretch=False)
+        bar = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=bar.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        for n, g in enumerate(self.groups):
+            key = "dup_same_audio" if g["reason"] == "audio" else "dup_same_title"
+            parent = self.tree.insert("", "end", text=T(key, count=len(g["tracks"])), open=True)
+            keep = lt.best_of(g["tracks"])
+            for t in g["tracks"]:
+                label = (t.get("folder") or "") + " / " + (t.get("title") or t["file"])
+                if t.get("artist"):
+                    label += "  -  " + t["artist"]
+                iid = self.tree.insert(parent, "end", text=label, values=(
+                    lt.mmss(t.get("duration") or 0), f"{lt.bitrate_kbps(t)} kbps", ""))
+                self.items[iid] = (n, t)
+                self.remove[iid] = t is not keep
+                self.show(iid)
+        self.tree.bind("<Double-1>", self.toggle)
+        self.tree.bind("<space>", self.toggle)
+        return self.tree
+
+    def show(self, iid):
+        self.tree.set(iid, "action", T("dup_move") if self.remove[iid] else T("dup_keep"))
+
+    def toggle(self, _event=None):
+        iid = self.tree.focus()
+        if iid in self.items:
+            self.remove[iid] = not self.remove[iid]
+            self.show(iid)
+
+    def validate(self):
+        for n in range(len(self.groups)):
+            if all(self.remove[iid] for iid, (g, _) in self.items.items() if g == n):
+                messagebox.showwarning(T("dup_title"), T("dup_keep_one"), parent=self)
+                return False
+        return True
+
+    def apply(self):
+        pairs = []
+        for n in range(len(self.groups)):
+            kept = [t for iid, (gn, t) in self.items.items() if gn == n and not self.remove[iid]]
+            keep = lt.best_of(kept)
+            pairs += [(t, keep) for iid, (gn, t) in self.items.items() if gn == n and self.remove[iid]]
+        self.result = pairs
+
+
+class CoverDialog(simpledialog.Dialog):
+    """One album without a cover: the cover found online (if any) and what to do with it.
+    Result: "use", "other", "skip", "stop" or ("file", path)."""
+
+    def __init__(self, parent, title, album, found, preview, error, more, step):
+        self.album, self.found, self.preview = album, found, preview
+        self.error, self.more, self.step = error, more, step
+        self.image = None
+        super().__init__(parent, title)
+
+    def body(self, master):
+        a = self.album
+        ttk.Label(master, text=self.step, style="Hint.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(master, text=T("cover_album", album=a["album"], artist=a["artist"] or "-", count=len(a["ids"]),
+                                 folder=a["folder"]), wraplength=420, justify="left").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
+        if self.preview:
+            try:
+                self.image = tk.PhotoImage(file=str(self.preview))
+            except tk.TclError:
+                self.image = None
+        if self.image:
+            ttk.Label(master, image=self.image).grid(row=2, column=0, columnspan=2, pady=4)
+            f = self.found
+            year = "(" + f["date"] + ")" if f.get("date") else ""
+            ttk.Label(master, text=T("cover_found", title=f["title"], artist=f["artist"], year=year),
+                      wraplength=420).grid(row=3, column=0, columnspan=2, sticky="w")
+        else:
+            text = T("cover_error", error=self.error) if self.error else T("cover_not_found")
+            ttk.Label(master, text=text, wraplength=420).grid(row=2, column=0, columnspan=2, sticky="w", pady=20)
+        return None
+
+    def buttonbox(self):
+        box = ttk.Frame(self)
+        use = ttk.Button(box, text=T("cover_use"), command=lambda: self.done("use"), default="active")
+        use.pack(side="left", padx=4, pady=8)
+        if not self.image:
+            use.state(["disabled"])
+        other = ttk.Button(box, text=T("cover_other"), command=lambda: self.done("other"))
+        other.pack(side="left", padx=4, pady=8)
+        if not self.more:
+            other.state(["disabled"])
+        ttk.Button(box, text=T("cover_choose"), command=self.choose).pack(side="left", padx=4, pady=8)
+        ttk.Button(box, text=T("cover_skip"), command=lambda: self.done("skip")).pack(side="left", padx=4, pady=8)
+        ttk.Button(box, text=T("cover_stop"), command=lambda: self.done("stop")).pack(side="left", padx=4, pady=8)
+        self.bind("<Escape>", lambda e: self.done("stop"))
+        box.pack()
+
+    def choose(self):
+        path = filedialog.askopenfilename(parent=self, title=T("cover_choose"), filetypes=[
+            (T("image_files"), "*.jpg *.jpeg *.png *.webp *.bmp")])
+        if path:
+            self.done(("file", path))
+
+    def done(self, result):
+        self.result = result
+        self.withdraw()
+        self.update_idletasks()
+        self.parent.focus_set()
+        self.destroy()
+
+
 class App:
     def __init__(self, root: tk.Tk, addon: Path):
         self.root = root
@@ -210,6 +341,11 @@ class App:
         self.button(bar, T("add_files"), self.add_files).pack(side="left", padx=(0, 6))
         self.button(bar, T("add_folder"), self.add_folder).pack(side="left", padx=(0, 6))
         self.button(bar, T("open_music"), self.open_music).pack(side="left")
+        tools = ttk.Frame(music)
+        tools.grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(tools, text=T("tools_label")).pack(side="left", padx=(0, 6))
+        self.button(tools, T("find_duplicates"), self.find_duplicates).pack(side="left", padx=(0, 6))
+        self.button(tools, T("find_covers"), self.find_covers).pack(side="left")
 
         lib = ttk.LabelFrame(main, text=f" {T('library_frame')} ", padding=8)
         lib.grid(row=3, column=0, sticky="ew", pady=3)
@@ -672,6 +808,112 @@ class App:
         self.save_settings()
         self.refresh()
 
+    # --- library tools (duplicates, covers from the internet) -----------------------
+
+    def tool_message(self, message: str) -> None:
+        self.set_busy(False, "")
+        messagebox.showinfo(T("title"), message, parent=self.root)
+
+    def after_tool(self, message: str) -> None:
+        """A tool changed the music: say so, then import at once so the library follows."""
+        self.tool_message(message)
+        self.start_import()
+
+    def find_duplicates(self) -> None:
+        self.set_busy(True, T("status_dup_search"))
+        self.work(self.duplicates_step)
+
+    def duplicates_step(self) -> None:
+        groups = lt.duplicate_groups()
+        self.ui(lambda: self.show_duplicates(groups))
+
+    def show_duplicates(self, groups: list[dict] | None) -> None:
+        if groups is None:
+            self.tool_message(T("need_import"))
+            return
+        if not groups:
+            self.tool_message(T("dup_none"))
+            return
+        self.set_busy(False, "")
+        pairs = DuplicatesDialog(self.root, T("dup_title"), groups).result
+        if pairs:
+            self.set_busy(True, T("status_dup_search"))
+            self.work(self.move_step, pairs)
+
+    def move_step(self, pairs: list[tuple[dict, dict]]) -> None:
+        moved = lt.move_duplicates(pairs)
+        folder = im.DATA_DIR / lt.DUPLICATES_DIR_NAME
+        print(f"{moved} duplicate files moved to {folder}")
+        self.ui(lambda: self.after_tool(T("dup_done", count=moved, folder=folder)))
+
+    def find_covers(self) -> None:
+        self.set_busy(True, T("status_cover_list"))
+        self.work(self.covers_step)
+
+    def covers_step(self) -> None:
+        tracks = lt.library_tracks()
+        if tracks is None:
+            self.ui(lambda: self.tool_message(T("need_import")))
+            return
+        albums = lt.albums_without_cover(tracks)
+        if not albums:
+            self.ui(lambda: self.tool_message(T("cover_none")))
+            return
+        if not self.ask_ui(lambda: messagebox.askyesno(T("cover_title"), T("cover_privacy", count=len(albums)),
+                                                       parent=self.root)):
+            self.ui(lambda: self.set_busy(False, ""))
+            return
+        saved = 0
+        choice = None
+        for n, album in enumerate(albums):
+            step = T("status_cover", done=n + 1, total=len(albums), album=album["album"])
+            self.ui(lambda n=n, step=step: self.set_progress(n, len(albums), step))
+            try:
+                candidates, error = lt.search_releases(album["album"], album["artist"]), None
+            except Exception as exc:  # noqa: BLE001 - offline, MusicBrainz down...
+                candidates, error = [], str(exc)
+            pending = list(candidates)
+
+            def next_cover(pending=pending):
+                while pending:
+                    cand = pending.pop(0)
+                    data = lt.download_cover(cand)
+                    if data:
+                        return cand, data, lt.preview_png(data)
+                return None, None, None
+
+            found, data, preview = next_cover()
+            while True:
+                choice = self.ask_ui(lambda: CoverDialog(self.root, T("cover_title"), album, found, preview,
+                                                         error, bool(pending), step).result)
+                if choice == "other":
+                    found, data, preview = next_cover()
+                    continue
+                if choice == "use" and data:
+                    saved += lt.save_found_cover(album["ids"], data) is not None
+                elif isinstance(choice, tuple):
+                    saved += self.save_picked(album, Path(choice[1]))
+                break
+            if choice in (None, "stop"):
+                break
+        print(f"{saved} covers saved in {im.MUSIC_DIR / im.FOUND_COVERS_DIR_NAME}")
+        if saved:
+            self.ui(lambda: self.after_tool(T("cover_done", count=saved)))
+        else:
+            self.ui(lambda: self.set_busy(False, ""))
+
+    def save_picked(self, album: dict, path: Path) -> int:
+        """An image chosen by hand for an album (webp, bmp... are stored as PNG). 1 if saved."""
+        try:
+            data = path.read_bytes()
+        except OSError as exc:
+            print(f"  {path}: {exc}")
+            return 0
+        if not lt.image_kind(data):
+            png = lt.preview_png(data, 512)
+            data = png.read_bytes() if png else b""
+        return int(bool(data) and lt.save_found_cover(album["ids"], data) is not None)
+
     # --- import ------------------------------------------------------------------------
 
     def start_import(self) -> None:
@@ -696,8 +938,11 @@ class App:
             return self.ask_ui(lambda: messagebox.askyesno(T("title"), T("copy_confirm", count=count),
                                                            parent=self.root))
 
-        def progress(done: int, total: int, label: str) -> None:
-            text = T("status_importing_folder", folder=label) if label else T("status_writing")
+        def progress(done: int, total: int, label: str, stage: str | None = None) -> None:
+            if stage == "loudness":
+                text = T("status_loudness", folder=label)
+            else:
+                text = T("status_importing_folder", folder=label) if label else T("status_writing")
             self.ui(lambda: self.set_progress(done, total, text))
 
         # download and conversion run at the same time (two threads): both lines are shown, the bar
