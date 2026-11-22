@@ -234,13 +234,24 @@ end
 -- Volume controller. WoW has no per-track volume: everything goes through the Music
 -- volume CVar. The user's volume (db.userVolume) is the only source of truth; what we
 -- write is   user x condition volume x dialogue ducking x crossfade x track loudness correction.
--- If the CVar is changed outside the addon (game Options), it is adopted as the new
--- user volume. On logout the plain user volume is written back.
+-- If the CVar is changed outside the addon, it is either the user (game Options) or another
+-- addon lowering the music for a while (Spoken or VivaVoce, voiced dialogue: it saves the volume, lowers
+-- it, and puts it back if nobody else wrote it meanwhile). With the game Options open it is
+-- adopted as the new user volume at once. Otherwise the addon stops writing the CVar ("held
+-- by another addon") until the value we wrote comes back; if it doesn't, the new value is
+-- adopted once it has been still for FOREIGN_GRACE seconds and no voiceover is speaking.
+-- Adopting at once (before 2.0.2) took Spoken's lowered volume as the user's, and our next
+-- write made Spoken give up its restore: the music stayed low for good.
+-- On logout the plain user volume is written back.
 ---------------------------------------------------------------------------
 local FADE_STEPS, FADE_TIME = 8, 0.8
 local DUCK_LEVEL = 0.25
+local EPSILON = 0.005 -- below this a difference is the CVar's rounding
+local FOREIGN_GRACE = 5
 local V = { user = nil, cond = 1, duck = 1, fade = 1, track = 1, lastWritten = nil, lastMul = 1 }
 local tweens = {}
+local foreign -- { since, value, ticker } while another addon holds the Music volume
+local applyVolume
 
 local function getVolume()
   local get = (C_CVar and C_CVar.GetCVar) or GetCVar
@@ -254,20 +265,81 @@ end
 
 local function clamp(v) return math.max(0, math.min(1, v)) end
 
--- The CVar no longer holds what we wrote: the user changed it in the game options.
-local function syncExternal()
-  if not V.lastWritten then return end
-  local cv = getVolume()
-  if math.abs(cv - V.lastWritten) > 0.005 and V.lastMul > 0.01 then
+-- The game's own options window is open: a change of the Music volume is the user's.
+local OPTION_FRAMES = { "SettingsPanel", "VideoOptionsFrame", "AudioOptionsFrame", "InterfaceOptionsFrame" }
+local function optionsOpen()
+  for _, name in ipairs(OPTION_FRAMES) do
+    local f = _G[name]
+    if type(f) == "table" and f.IsShown and f:IsShown() then return true end
+  end
+  return false
+end
+
+-- Voiceover addons that lower the music while a line plays: Spoken and its Italian fork
+-- VivaVoce (global VivaVoice). Their public API (API_VERSION 1) says whether a line is playing.
+local VOICE_ADDONS = { "Spoken", "VivaVoice" }
+local function voiceoverSpeaking()
+  for _, name in ipairs(VOICE_ADDONS) do
+    local S = _G[name]
+    if type(S) == "table" and type(S.IsPlaying) == "function" then
+      local ok, playing = pcall(S.IsPlaying, S)
+      if ok and playing == true then return true end
+    end
+  end
+  return false
+end
+
+local function adoptExternal(cv)
+  if V.lastMul > 0.01 then
     V.user = clamp(cv / V.lastMul)
     ns.db.userVolume = V.user
-    V.lastWritten = cv
     ns.Fire("VOLUME_CHANGED", V.user)
+  end
+  V.lastWritten = cv
+end
+
+local function endForeign()
+  if not foreign then return end
+  if foreign.ticker then foreign.ticker:Cancel() end
+  foreign = nil
+end
+
+local function checkForeign()
+  if not foreign then return end
+  local cv = getVolume()
+  if math.abs(cv - V.lastWritten) <= EPSILON then -- put back: ours again
+    endForeign()
+    applyVolume()
+    return
+  end
+  local now = GetTime()
+  if math.abs(cv - foreign.value) > EPSILON or voiceoverSpeaking() then
+    foreign.value, foreign.since = cv, now -- still moving, or still speaking
+  end
+  if optionsOpen() or now - foreign.since >= FOREIGN_GRACE then
+    endForeign()
+    adoptExternal(cv)
+    applyVolume()
   end
 end
 
-local function applyVolume()
-  syncExternal()
+-- Returns true while another addon holds the CVar: nothing must be written.
+local function syncExternal()
+  if foreign then return true end
+  if not V.lastWritten then return false end
+  local cv = getVolume()
+  if math.abs(cv - V.lastWritten) <= EPSILON then return false end
+  if optionsOpen() then
+    adoptExternal(cv)
+    return false
+  end
+  foreign = { since = GetTime(), value = cv }
+  foreign.ticker = C_Timer.NewTicker(0.5, checkForeign)
+  return true
+end
+
+function applyVolume()
+  if syncExternal() then return end
   local mul = V.cond * V.duck * V.fade * V.track
   local eff = clamp((V.user or 1) * mul)
   setVolume(eff)
@@ -313,12 +385,15 @@ function P:InitVolume()
   V.user = ns.db.userVolume or getVolume()
   ns.db.userVolume = V.user
   V.cond, V.duck, V.fade, V.track = 1, 1, 1, 1
+  endForeign()
+  V.lastWritten = nil
   applyVolume()
 end
 
 -- On logout: give the game back the plain user volume.
 function P:RestoreVolume()
   cancelFadeHold()
+  endForeign()
   for k, t in pairs(tweens) do t:Cancel() tweens[k] = nil end
   if V.user then setVolume(V.user) end
   V.lastWritten = nil
@@ -332,6 +407,9 @@ end
 function P:SetVolume(v)
   V.user = clamp(tonumber(v) or 0)
   ns.db.userVolume = V.user
+  -- the user's own choice: it wins over another addon's lowering
+  endForeign()
+  V.lastWritten = nil
   applyVolume()
   ns.Fire("VOLUME_CHANGED", V.user)
 end
@@ -421,9 +499,9 @@ end
 
 -- For /kzz debug.
 function P:DebugState()
-  return ("playing %s, playlist %s, stopped %s, afk %s, zone break %s, volume x%.2f (cond %.2f duck %.2f fade %.2f track %.2f, loudness %s ref %s)"):format(
+  return ("playing %s, playlist %s, stopped %s, afk %s, zone break %s, held by another addon %s, volume x%.2f (cond %.2f duck %.2f fade %.2f track %.2f, loudness %s ref %s)"):format(
     tostring(self.playing), tostring(self.playlist), tostring(self.userStopped), tostring(self.afkPaused),
-    tostring(self.zoneBreakUntil ~= nil), V.cond * V.duck * V.fade * V.track, V.cond, V.duck, V.fade, V.track,
+    tostring(self.zoneBreakUntil ~= nil), tostring(foreign ~= nil), V.cond * V.duck * V.fade * V.track, V.cond, V.duck, V.fade, V.track,
     tostring(self.track and self.track.loudness), tostring(ns.loudnessRef))
 end
 

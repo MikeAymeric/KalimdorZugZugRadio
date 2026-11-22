@@ -526,9 +526,48 @@ check("free play uses the user's own volume", math.abs(tonumber(musicVolume) - 0
 ns.SetMode("auto"); ns.SetConditionVolume(condKey, 1); advance(5)
 
 -- volume changed in the game options is adopted
+rawset(SettingsPanel, "_shown", true)
 musicVolume = "0.3"; ns.Player:GetVolume()
 check("external volume change becomes the user volume", math.abs(ns.Player:GetVolume() - 0.3) < 0.01)
+rawset(SettingsPanel, "_shown", false)
 ns.Player:SetVolume(0.8)
+
+-- 2.0.2: another addon (Spoken, voiced dialogue) lowers the music for a while. A switch
+-- during the line must neither take the lowered volume as the user's nor overwrite it.
+do
+  local talking = false
+  Spoken = { IsPlaying = function() return talking end }
+  ns.db.crossfade = true; advance(5)
+  talking = true; musicVolume = "0.24" -- Spoken lowers the music (x0.3)
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(2)
+  check("Spoken: a switch during a line doesn't overwrite its lowering",
+    musicVolume == "0.24" and ns.db.userVolume == 0.8 and ns.Player:GetVolume() == 0.8)
+  advance(10)
+  check("Spoken: held while the line plays", musicVolume == "0.24" and ns.db.userVolume == 0.8)
+  talking = false; musicVolume = "0.8"; advance(1) -- the line ends: Spoken puts back what it saved
+  check("Spoken: after the line the addon writes again", math.abs(tonumber(musicVolume) - 0.8) < 0.001
+    and not ns.Player:DebugState():find("held by another addon true"))
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+  -- another addon (or a key binding) lowers it for good: adopted after a few quiet seconds
+  musicVolume = "0.5"; ns.Player:SetConditionVolume(1); advance(2)
+  check("unknown change: held at first", musicVolume == "0.5" and ns.db.userVolume == 0.8)
+  advance(5)
+  check("unknown change: adopted once still", math.abs(ns.db.userVolume - 0.5) < 0.01)
+  -- the user's own slider always wins
+  musicVolume = "0.3"; ns.Player:SetConditionVolume(1); ns.Player:SetVolume(0.8)
+  check("our slider wins over a hold", math.abs(tonumber(musicVolume) - 0.8) < 0.001 and ns.db.userVolume == 0.8)
+  -- VivaVoce (Italian fork of Spoken, global VivaVoice) works the same way
+  Spoken = nil
+  VivaVoice = { IsPlaying = function() return talking end }
+  ns.db.crossfade = true
+  talking = true; musicVolume = "0.24"
+  G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(10)
+  check("VivaVoce: held while the line plays", musicVolume == "0.24" and ns.db.userVolume == 0.8)
+  talking = false; musicVolume = "0.8"; advance(1)
+  check("VivaVoce: after the line the addon writes again", math.abs(tonumber(musicVolume) - 0.8) < 0.001)
+  G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+  VivaVoice = nil; ns.db.crossfade = false; advance(5)
+end
 
 -- boss-specific music
 ns.CreatePlaylist("Rag"); ns.SetInPlaylist("Rag", "music\\a.ogg", true)

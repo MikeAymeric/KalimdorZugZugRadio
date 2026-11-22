@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2
+
+- **Fixed: the music stayed low after a voiced dialogue** with **Spoken** or **VivaVoce** (voiceover addons for quests and gossip). They lower the music while a line plays and put it back afterwards, but if the radio changed track or condition during the line, it took the lowered volume as yours and the music stayed low until you raised it by hand. Now the radio waits for the line to end and the music comes back to your volume by itself.
+- A change of the Music volume in the game's options is still taken as your new volume at once; a change made by another addon is taken only if it stays for a few seconds.
+- `/kzz debug` shows when another addon is holding the music volume.
+
 ## 2.0.1
 
 Smoother music between pulls.
