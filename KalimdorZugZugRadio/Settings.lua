@@ -272,7 +272,7 @@ end
 -- Refresh
 ---------------------------------------------------------------------------
 function S:RefreshConditions()
-  if not panel or not panel:IsShown() then return end
+  if not panel or not panel:IsVisible() then return end
   local free = ns.db.mode ~= "auto"
   panel.freeWarn:SetShown(free)
   panel.freeBack:SetShown(free)
@@ -347,11 +347,14 @@ function S:Build()
     S:MakeStandalone()
   end
 
+  -- IsVisible, not IsShown: the canvas frame stays "shown" inside the hidden Options window (and
+  -- before it is ever opened), so IsShown rebuilt every menu on each playlist or mode change and
+  -- the game hitched. OnShow refreshes everything when the panel really appears.
   for _, ev in ipairs({ "STATE_CHANGED", "PLAYLISTS_CHANGED", "SETTINGS_CHANGED", "MODE_CHANGED", "SITUATION_CHANGED" }) do
-    ns.On(ev, function() if panel:IsShown() then S:Refresh() end end)
+    ns.On(ev, function() if panel:IsVisible() then S:Refresh() end end)
   end
   for _, ev in ipairs({ "PLAYLISTS_CHANGED", "SETTINGS_CHANGED", "MODE_CHANGED" }) do
-    ns.On(ev, function() if panel:IsShown() then S:RefreshMenus() end end)
+    ns.On(ev, function() if panel:IsVisible() then S:RefreshMenus() end end)
   end
 end
 

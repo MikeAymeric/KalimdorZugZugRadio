@@ -61,6 +61,7 @@ stub = function()
     if k == "SetValue" then return function(self, v) local s = rawget(self, "_OnValueChanged"); if s then s(self, v) end end end
     -- Like the real client, SetupMenu runs the generator at once and reads the radio/checkbox states.
     if k == "SetupMenu" then return function(self, gen) rawset(self, "_gen", gen); gen(self, menuRoot()) end end
+    if k == "GenerateMenu" then return function(self) local gen = rawget(self, "_gen"); if gen then gen(self, menuRoot()) end end end
     if k == "GetPoint" then return function() return "CENTER", nil, "CENTER", 0, 0 end end
     if k == "NumLines" then return function() return 0 end end
     if k == "GetFrameLevel" then return function() return 5 end end
@@ -1384,6 +1385,27 @@ do
   for k, v in pairs(saved) do db[k] = v end
   KZZR_UserLibrary = savedLib
   ns.LoadLibrary()
+end
+
+-- 2.0.3: switching playlist or player size must not rebuild the hidden settings menus, and a
+-- menu recomputes the smart playlists at most once per frame (it used to stutter the game).
+do
+  ns.SaveSmartPlaylist(nil, "PerfSmart", { match = "all", rules = { { field = "title", op = "has", value = "a" } } })
+  ns.db.seenBosses[9001], ns.db.seenBosses[9002] = "Boss one", "Boss two"
+  local real, calls = ns.SmartTracks, 0
+  ns.SmartTracks = function(...) calls = calls + 1 return real(...) end
+  local panel = KalimdorZugZugSettingsPanel
+  rawset(panel, "_shown", false) -- not visible: inside the closed Options window
+  advance(1); calls = 0
+  ns.SetMode(ns.ALL); ns.UI:SetCompact(not ns.db.ui.compact); ns.UI:SetCompact(not ns.db.ui.compact); ns.SetMode("auto")
+  check("hidden settings: a playlist or size change doesn't rebuild their menus", calls <= 1)
+  rawset(panel, "_shown", true) -- the settings are open
+  advance(1); calls = 0
+  ns.SetMode(ns.ALL); ns.SetMode("auto")
+  check("open settings: smart playlists recomputed once per frame", calls == 1)
+  ns.SmartTracks = real
+  ns.db.seenBosses[9001], ns.db.seenBosses[9002] = nil, nil
+  ns.DeletePlaylist("PerfSmart"); advance(5)
 end
 check("no startup errors", #ns.startupErrors == 0)
 print(fails == 0 and "ALL TESTS PASSED" or (fails .. " TESTS FAILED"))

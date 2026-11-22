@@ -74,7 +74,7 @@ v0.5 additions:
 - **Performance.**
   - Event handlers only update state; `Rules` coalesces evaluations into one `C_Timer.After(0)`.
   - `UNIT_AURA` is ignored in combat. `ActiveSet` reuses one table. The map chain and the zone are cached, invalidated on zone events.
-  - Menus are rebuilt only on `PLAYLISTS_CHANGED`/`MODE_CHANGED`/`SETTINGS_CHANGED`.
+  - Menus are rebuilt only on `PLAYLISTS_CHANGED`/`MODE_CHANGED`/`SETTINGS_CHANGED`. The Settings panel checks `panel:IsVisible()`, never `IsShown()`: the canvas frame stays "shown" inside the closed Options window, so before 2.0.3 every playlist or player-size change rebuilt all its menus (16 conditions + a playlist list per seen boss/dungeon/enemy) and the game hitched. `ns.AllPlaylistNames` recomputes the dynamic/smart playlists at most once per frame (`GetTime()` stamp). The harness `GenerateMenu` stub runs the generator like the client.
   - `ns.Profiled(name, fn)` records CPU time (`debugprofilestop`); `/kzz perf` prints it and stores it in `db.lastPerf`, which is also saved on logout.
 
 v0.6 additions:

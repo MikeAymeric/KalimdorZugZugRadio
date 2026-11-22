@@ -491,8 +491,16 @@ function ns.SetEpisodePart(t, part, done)
 end
 
 -- All playlists to show in menus: the virtual ones (if they have tracks) + the user's.
+-- The dynamic and smart playlists are recomputed at most once per frame: one menu calls this
+-- for every submenu (assign here, specific bosses/dungeons/enemies), and each recompute
+-- filters the whole library.
+local lastDynamicRefresh
 function ns.AllPlaylistNames()
-  ns.InvalidateDynamic()
+  local now = GetTime()
+  if now ~= lastDynamicRefresh then
+    lastDynamicRefresh = now
+    ns.InvalidateDynamic()
+  end
   local names = ns.PlaylistNames()
   for _, virtual in ipairs({ ns.TOP, ns.HISTORY, ns.FAV }) do
     if ns.IsPlayable(virtual) then table.insert(names, 1, virtual) end

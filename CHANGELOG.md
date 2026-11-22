@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- **Fixed: the game stuttered for a moment** when you changed playlist or switched between the full and the compact player. The addon's settings page rebuilt all its menus every time, even when it was closed, and each menu recalculated your smart playlists over the whole library (74 times for two playlist changes, in a test). Now the settings page is only updated while you look at it, and smart playlists are recalculated at most once per frame.
+
 ## 2.0.2
 
 - **Fixed: the music stayed low after a voiced dialogue** with **Spoken** or **VivaVoce** (voiceover addons for quests and gossip). They lower the music while a line plays and put it back afterwards, but if the radio changed track or condition during the line, it took the lowered volume as yours and the music stayed low until you raised it by hand. Now the radio waits for the line to end and the music comes back to your volume by itself.
