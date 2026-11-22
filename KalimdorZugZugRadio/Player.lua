@@ -298,6 +298,12 @@ local function setFactor(field, value)
   V[field] = value
 end
 
+-- The pause before a fight tail's fade-out (see P:FadeOutSlowly).
+local fadeHold
+local function cancelFadeHold()
+  if fadeHold then fadeHold:Cancel() fadeHold = nil end
+end
+
 -- Called on load: recover from a /reload or crash in the middle of a fade/duck.
 function P:InitVolume()
   if ns.db.fadeVolume then -- left over by version 0.5
@@ -312,6 +318,7 @@ end
 
 -- On logout: give the game back the plain user volume.
 function P:RestoreVolume()
+  cancelFadeHold()
   for k, t in pairs(tweens) do t:Cancel() tweens[k] = nil end
   if V.user then setVolume(V.user) end
   V.lastWritten = nil
@@ -357,6 +364,7 @@ end
 -- Switch playlist because the condition changed (fades if enabled and something is playing).
 -- fresh: start a different track than last time (fights).
 function P:SwitchTo(name, key, fresh)
+  cancelFadeHold()
   local mult = key and ns.ConditionVolume(key) or 1
   if not ns.db.crossfade or not self.playing or name == self.playlist then
     setFactor("fade", 1) -- a fight fade-out may have been interrupted
@@ -377,19 +385,37 @@ function P:SwitchTo(name, key, fresh)
   end
 end
 
--- After a fight: the music fades out slowly while the addon waits to leave the condition
--- (only with crossfade enabled).
+-- After a fight: the music stays at full volume for the first part of the tail and fades out
+-- in its last seconds (only with crossfade enabled). Fading from the start made the volume
+-- dip and swell back between chained pulls (casting the next spell takes a few seconds).
+function P.FadeOutLength(seconds)
+  return math.min(seconds, math.max(3, seconds * 0.4))
+end
+
 function P:FadeOutSlowly(seconds)
-  if ns.db.crossfade and self.playing then tween("fade", 0, nil, seconds) end
+  cancelFadeHold()
+  if not ns.db.crossfade or not self.playing then return end
+  local fade = P.FadeOutLength(seconds)
+  if seconds - fade < 0.05 then
+    tween("fade", 0, nil, fade)
+    return
+  end
+  fadeHold = C_Timer.NewTimer(seconds - fade, function()
+    fadeHold = nil
+    tween("fade", 0, nil, fade)
+  end)
 end
 
 -- End of the fight tail (or its track ended): the fade-out is over, switch without a second one.
+-- If it had not started yet (the track ended early in the tail), the switch fades normally.
 function P:EndFadeOut()
+  if fadeHold then cancelFadeHold() return end
   if tweens.fade then setFactor("fade", 0) end
 end
 
 -- Back in the fight before the end of the fade-out: back to the previous volume.
 function P:CancelFadeOut()
+  cancelFadeHold()
   if V.fade < 1 or tweens.fade then tween("fade", 1, nil, 1) end
 end
 

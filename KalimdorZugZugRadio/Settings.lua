@@ -175,7 +175,7 @@ local function build(p)
   tailLabel:SetPoint("TOPLEFT", 334, -304)
   tailLabel:SetText(L.OPT_FIGHT_TAIL)
   p.fightTail = ns.MakeDropdown(c, 80, L.FIGHT_TAIL_SECONDS:format(8), function(_, root)
-    for _, sec in ipairs({ 4, 6, 8, 10 }) do
+    for _, sec in ipairs({ 4, 6, 8, 10, 12, 15, 20 }) do
       ns.StyleMenuItem(root:CreateRadio(L.FIGHT_TAIL_SECONDS:format(sec),
         function() return (ns.db.fightTail or 8) == sec end,
         function() ns.db.fightTail = sec end))

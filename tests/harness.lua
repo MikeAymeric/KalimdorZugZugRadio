@@ -130,6 +130,7 @@ function IsSwimming() return G.swimming end
 function IsMounted() return G.mounted end
 function IsFlying() return G.flying end
 function UnitIsDeadOrGhost() return G.dead end
+function UnitIsDead() return G.targetDead == true end
 function UnitChannelInfo() return G.channel end
 MAPS = { [1411] = { name = "Durotar", mapType = 3, parentMapID = 12 }, [12] = { name = "Kalimdor", mapType = 2, parentMapID = 947 },
          [1454] = { name = "Orgrimmar", mapType = 3, parentMapID = 1411 } }
@@ -550,8 +551,8 @@ G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(2)
 local first = ns.Player.track
 check("fight: combat music", ns.Player.playlist == "Pulls" and math.abs(vol() - 0.8) < 0.001)
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(3)
-check("fight tail: same song, fading out", ns.Player.playlist == "Pulls" and ns.Player.track == first
-  and vol() < 0.75 and vol() > 0.05 and ns.db.userVolume == 0.8)
+check("fight tail: same song, still at full volume", ns.Player.playlist == "Pulls" and ns.Player.track == first
+  and math.abs(vol() - 0.8) < 0.001 and ns.db.userVolume == 0.8)
 G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1.5)
 check("back in the fight: same song, volume restored", ns.Player.track == first and math.abs(vol() - 0.8) < 0.001)
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(3.7)
@@ -563,8 +564,12 @@ check("volume back after the tail", math.abs(vol() - 0.8) < 0.001)
 G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
 local second = ns.Player.track
 check("a new fight starts a different track", ns.Player.playlist == "Pulls" and second ~= first)
-G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(7.5)
-check("the tail lasts the chosen 8 s", ns.Player.playlist == "Pulls" and ns.Player.track == second and vol() < 0.1)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(4)
+check("tail: full volume for the first seconds", ns.Player.track == second and math.abs(vol() - 0.8) < 0.001)
+advance(2)
+check("tail: fading out in its last seconds", ns.Player.track == second and vol() < 0.75 and vol() > 0.05)
+advance(1.5)
+check("the tail lasts the chosen 8 s", ns.Player.playlist == "Pulls" and ns.Player.track == second and vol() < 0.2)
 advance(1); advance(1)
 check("after the tail: back to the calm music, full volume", ns.Player.playlist == calm and math.abs(vol() - 0.8) < 0.001)
 G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
@@ -586,6 +591,22 @@ G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
 G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(5)
 check("a normal fight after a boss uses the long tail again", ns.Player.playlist == "Pulls")
 advance(5)
+-- casting at an enemy during the tail (the next pull) brings the volume back and restarts the tail
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+check("cast test: fading out", ns.Player.playlist == "Pulls" and vol() < 0.75)
+fire("UNIT_SPELLCAST_START", "player", "guid", 116); advance(1.5)
+check("cast at an enemy during the tail: full volume again", ns.Player.playlist == "Pulls" and math.abs(vol() - 0.8) < 0.001)
+advance(1)
+check("cast at an enemy: the tail starts over", ns.Player.playlist == "Pulls" and math.abs(vol() - 0.8) < 0.001)
+advance(10)
+check("restarted tail ends normally", ns.Player.playlist == calm and math.abs(vol() - 0.8) < 0.001)
+G.combat = true; fire("PLAYER_REGEN_DISABLED"); advance(1)
+G.combat = false; fire("PLAYER_REGEN_ENABLED"); advance(6)
+G.targetDead = true; fire("UNIT_SPELLCAST_START", "player", "guid", 116); fire("UNIT_SPELLCAST_START", "nameplate1", "guid", 116)
+advance(1)
+check("cast at a dead target or by someone else: the fade goes on", vol() < 0.4)
+G.targetDead = nil; advance(5)
 ns.DeletePlaylist("Pulls"); ns.DeletePlaylist("BossPL"); ns.db.fightTail = 4; ns.db.crossfade = false; advance(5)
 
 -- 1.0: weighted shuffle (skips, never heard, recently played)

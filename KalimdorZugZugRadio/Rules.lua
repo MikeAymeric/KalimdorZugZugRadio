@@ -216,6 +216,23 @@ local function finishTail()
   R:Apply(R:Resolve())
 end
 
+local function startTail()
+  local length = R:FightTailLength()
+  pendingKey = TAIL
+  pending = C_Timer.NewTimer(length, finishTail)
+  ns.Player:FadeOutSlowly(length)
+end
+
+-- Casting at a living enemy during the tail (the next pull, e.g. a mage's Frostbolt before
+-- the combat starts) counts as still fighting: full volume again and the tail starts over.
+local function castAtEnemy(unit)
+  if unit ~= "player" or pendingKey ~= TAIL then return end
+  if ns.Safe(UnitCanAttack, "player", "target") ~= true then return end
+  if UnitIsDead and ns.Safe(UnitIsDead, "target") ~= false then return end
+  cancelPending(true)
+  startTail()
+end
+
 -- Called by the player when a track ends: during a fight tail, don't start another fight
 -- track at low volume.
 function R:TrackEnded()
@@ -240,10 +257,7 @@ function R:Evaluate(immediate)
   elseif FIGHT[self.current] and key ~= self.current and P.playing then
     if pendingKey ~= TAIL then
       cancelPending()
-      local length = self:FightTailLength()
-      pendingKey = TAIL
-      pending = C_Timer.NewTimer(length, finishTail)
-      P:FadeOutSlowly(length)
+      startTail()
     end
   elseif pendingKey ~= key then
     cancelPending()
@@ -312,7 +326,10 @@ function R:Start()
       state.fishing = true
       fishingUntil = math.huge
     end
+    castAtEnemy(unit)
   end)
+  -- fires for every unit casting nearby: no evaluation needed
+  ns.RegisterEvent("UNIT_SPELLCAST_START", function(unit) castAtEnemy(unit) end)
   on("UNIT_SPELLCAST_CHANNEL_STOP", function(unit)
     if unit == "player" and state.fishing then fishingUntil = GetTime() + FISHING_GRACE end
   end)

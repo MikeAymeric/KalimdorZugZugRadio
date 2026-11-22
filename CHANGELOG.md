@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1
+
+Smoother music between pulls.
+
+- **The fight music no longer dips while you cast your next pull**: after a fight the music now stays at full volume and only fades out in the last seconds before the next condition (the last 40% of the time you chose, at least 3 s). Before, it started fading at once, so a caster pulling the next enemy heard it fade during the cast and swell back when the spell hit.
+- **Casting at an enemy counts as fighting**: if you start casting at a living enemy while the fight music is winding down, it comes back to full volume and waits again from the start.
+- **Longer fight music**: *Music after a fight* in the settings now also offers 12, 15 and 20 seconds.
+
 ## 2.0.0
 
 The biggest update so far: your listening stats, star ratings, even volume across your tracks, and two new tools in the import window to clean up your library.
